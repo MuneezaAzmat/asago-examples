@@ -648,7 +648,7 @@ footer {
   font-size: 10px;
 }
 dialog {
-  width: 620px;
+  width: 900px;
   max-width: 94vw;
   background: var(--asago-card);
   color: var(--asago-text);
@@ -676,11 +676,75 @@ dialog label {
   font-size: 12px;
   margin: 15px 0;
 }
-dialog input {
+dialog input,
+dialog select {
   border: 1px solid var(--asago-border);
   border-radius: 3px;
   padding: 11px;
   width: 100%;
+  color: inherit;
+  background: var(--asago-card);
+}
+.model-role {
+  display: grid;
+  grid-template-columns: 145px minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 18px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--asago-border);
+}
+.model-role h3 {
+  font-size: 14px;
+  margin: 30px 0 0;
+}
+.model-role label {
+  margin: 0 0 6px;
+}
+.model-role small {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.model-role input {
+  margin-top: 8px;
+}
+.service-connections {
+  margin-top: 22px;
+}
+.service-connections summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+.service-grid button {
+  margin-top: 16px;
+}
+.service-grid small {
+  display: block;
+  margin-top: 8px;
+}
+.stage-model-summary {
+  padding: 12px 28px;
+  margin: 0;
+  color: var(--asago-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--asago-border);
+}
+@media (max-width: 740px) {
+  .model-role {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .model-role h3 {
+    margin: 0;
+  }
+  .service-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .field-row {
   display: grid;

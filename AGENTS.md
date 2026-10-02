@@ -57,6 +57,10 @@ environment. Keep PR dependency revisions explicit until the features are releas
 Scenario options are validated by `asago_demo.runtime`, applied by the worker,
 and recorded in each scenario stage's `generation_options`. Keep saved-run labels
 separate from the dashboard's next-run settings.
+`model_connection` resolves each role's LiteLLM/Ollama service and credentials;
+all workers and Garak clients must use it. Model discovery previews draft
+connections without saving them. Never forward the LiteLLM key to Ollama, and
+record only public connection details in stage state.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

@@ -14,7 +14,25 @@
     if (stage === "evaluation") return Array.isArray(result.attempts);
     return false;
   }
-  const exports = { chooseRunId, canRenderResult };
+  function resolveModel(config, role) {
+    const defaults = {
+      scenario: "litellm",
+      artifact: "same",
+      target: "ollama",
+      judge: "same",
+    };
+    const provider = config[`${role}_provider`] || defaults[role];
+    const model = config[role === "scenario" ? "model" : `${role}_model`] || "";
+    if (provider === "same" && ["artifact", "judge"].includes(role)) {
+      const parent = resolveModel(
+        config,
+        role === "artifact" ? "scenario" : "artifact",
+      );
+      return { provider: parent.provider, model: model || parent.model };
+    }
+    return { provider, model };
+  }
+  const exports = { chooseRunId, canRenderResult, resolveModel };
   if (typeof module !== "undefined") module.exports = exports;
   else root.AsagoViewState = exports;
 })(typeof window === "undefined" ? {} : window);

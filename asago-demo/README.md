@@ -23,14 +23,31 @@ Open **http://127.0.0.1:8765**. Keep the server running. Connection settings can
 also be edited in the dashboard; saved credentials stay in an ignored local file.
 The workspace root `.env` is supported, with `asago-demo/.env` taking precedence.
 
-Generation and judging use an OpenAI-compatible endpoint. The default served model
-is `gemma-4-26b`; set the actual name offered by your endpoint. The artifact/judge
-model can be configured separately from the scenario model.
+Open **Models & connections** to choose a service and model separately for scenario
+generation, artifact generation, the Garak target, and the Garak judge. Each role
+can use **LiteLLM** or **Ollama** through its OpenAI-compatible API. Artifact
+generation initially inherits the scenario service/model, and the judge inherits
+the artifact service/model; both can be overridden. Existing Gemma generation
+and Qwen/Ollama target settings are preserved.
+
+The panel loads model dropdowns from each service's `/models` endpoint. **Load
+LiteLLM models** and **Load Ollama models** refresh them using the connection fields
+currently in the panel. Listing models does not save settings or make an inference
+request. If discovery is unavailable, choose **Enter a model name…**. Click **Save
+model choices** to apply the selections to future runs. Active runs keep their
+original configuration; settings are locked while a run is active.
+
+LiteLLM retains its own base URL and API key. Ollama uses a separate base URL and
+never receives the LiteLLM key; a bare Ollama server URL is normalized to `/v1`.
+The default scenario model remains `gemma-4-26b`; use an actual served model name.
+Each new stage records the model/service it used without credentials, so saved
+results remain distinguishable from the next-run model choices.
 
 For evaluation, start [Ollama](https://ollama.com) and install a tool-capable Qwen
 model, for example `ollama pull qwen2.5:14b`. The target defaults to
-`http://127.0.0.1:11434/v1` and `qwen2.5:14b`. **Check Ollama** lists installed
-models. Tool support in Garak PR #11 uses the OpenAI-compatible chat path.
+`http://127.0.0.1:11434/v1` and `qwen2.5:14b`. **Load Ollama models** lists installed
+models. A tool-capable LiteLLM model can also be selected as the target. Tool
+support in Garak PR #11 uses the OpenAI-compatible chat path.
 
 ## Four stages
 
@@ -44,7 +61,7 @@ models. Tool support in Garak PR #11 uses the OpenAI-compatible chat path.
    risk traceability, and behavior specifications; select a supported scenario.
 3. **Artifact Generator:** generate and validate that scenario's conversation,
    tool-call context, and success/blocked rubric. Invalid artifacts stop the chain.
-4. **Garak Evaluation:** replay the artifact against Qwen and judge the next model
+4. **Garak Evaluation:** replay the artifact against the selected target and judge the next model
    response with [Garak PR #11](https://github.com/trustyai-explainability/garak/pull/11).
    Inspect the actual response, proposed tool calls, judge confidence/reasoning,
    and downloadable native Garak JSONL evidence.

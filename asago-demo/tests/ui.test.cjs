@@ -1,6 +1,43 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { chooseRunId, canRenderResult } = require("../view-state.js");
+const {
+  chooseRunId,
+  canRenderResult,
+  resolveModel,
+} = require("../view-state.js");
+
+test("inherited roles follow the selected service and independent overrides", () => {
+  const config = {
+    scenario_provider: "ollama",
+    model: "qwen:14b",
+    artifact_provider: "same",
+    artifact_model: "",
+    judge_provider: "same",
+    judge_model: "",
+    target_provider: "litellm",
+    target_model: "remote",
+  };
+  assert.deepEqual(resolveModel(config, "judge"), {
+    provider: "ollama",
+    model: "qwen:14b",
+  });
+  assert.deepEqual(resolveModel(config, "target"), {
+    provider: "litellm",
+    model: "remote",
+  });
+  config.artifact_provider = "litellm";
+  config.artifact_model = "gemma";
+  assert.deepEqual(resolveModel(config, "judge"), {
+    provider: "litellm",
+    model: "gemma",
+  });
+  config.judge_provider = "ollama";
+  config.judge_model = "local-judge";
+  assert.deepEqual(resolveModel(config, "judge"), {
+    provider: "ollama",
+    model: "local-judge",
+  });
+});
 
 test("failed worker without a result payload keeps its error view", () => {
   assert.equal(

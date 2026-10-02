@@ -26,6 +26,45 @@ SCENARIO_PROFILES = {
     "direct": "klarna-direct-canary-profile.yaml",
     "full": "klarna-capability-profile.yaml",
 }
+MODEL_DEFAULTS = {
+    "scenario_provider": "litellm",
+    "artifact_provider": "same",
+    "target_provider": "ollama",
+    "judge_provider": "same",
+    "judge_model": "",
+}
+
+
+def provider_connection(config: dict, provider: str) -> dict:
+    if provider == "litellm":
+        url = config.get("base_url", "")
+        key = config.get("api_key") or "none"
+    elif provider == "ollama":
+        url = (
+            config.get("ollama_base_url")
+            or config.get("target_base_url")
+            or "http://127.0.0.1:11434/v1"
+        )
+        if not urlparse(url).path.strip("/"):
+            url = url.rstrip("/") + "/v1"
+        key = "ollama"
+    else:
+        raise ValueError("Choose LiteLLM or Ollama")
+    return {"provider": provider, "base_url": url.rstrip("/"), "api_key": key}
+
+
+def model_connection(config: dict, role: str) -> dict:
+    if role not in {"scenario", "artifact", "target", "judge"}:
+        raise ValueError("Unknown model role")
+    provider = config.get(f"{role}_provider", MODEL_DEFAULTS[f"{role}_provider"])
+    model_key = "model" if role == "scenario" else f"{role}_model"
+    model = config.get(
+        model_key, {"scenario": "gemma-4-26b", "target": "qwen2.5:14b"}.get(role, "")
+    )
+    if provider == "same" and role in {"artifact", "judge"}:
+        parent = model_connection(config, "scenario" if role == "artifact" else "artifact")
+        return {**parent, "model": model or parent["model"]}
+    return {**provider_connection(config, provider), "model": model}
 
 
 def scenario_options(config: dict) -> dict:
@@ -93,6 +132,8 @@ class Settings:
         "target_base_url",
         "target_model",
         *SCENARIO_DEFAULTS,
+        *MODEL_DEFAULTS,
+        "ollama_base_url",
     }
 
     def __init__(self, root: Path = ROOT, defaults: dict | None = None):
@@ -116,7 +157,7 @@ class Settings:
                 "target_base_url": "http://127.0.0.1:11434/v1",
                 "target_model": "qwen2.5:14b",
             }
-        self.defaults = {**SCENARIO_DEFAULTS, **defaults}
+        self.defaults = {**SCENARIO_DEFAULTS, **MODEL_DEFAULTS, **defaults}
 
     def private(self) -> dict:
         saved = json.loads(self.path.read_text()) if self.path.exists() else {}
@@ -129,7 +170,8 @@ class Settings:
             "api_key_configured": bool(data.get("api_key")),
         }
 
-    def update(self, changes: dict) -> None:
+    def preview(self, changes: dict) -> dict:
+        """Validate a draft without replacing saved settings or credentials."""
         if not isinstance(changes, dict) or set(changes) - self.FIELDS:
             raise ValueError("Unknown configuration field")
         values = self.private()
@@ -145,7 +187,18 @@ class Settings:
                 continue
             values[key] = value.strip() if isinstance(value, str) else value
         scenario_options(values)
-        for field in ("base_url", "target_base_url"):
+        for role in ("scenario", "artifact", "target", "judge"):
+            provider = values[f"{role}_provider"]
+            allowed = (
+                ("litellm", "ollama", "same")
+                if role in {"artifact", "judge"}
+                else ("litellm", "ollama")
+            )
+            if provider not in allowed:
+                raise ValueError(f"Invalid service for {role}")
+            if not model_connection(values, role)["model"].strip():
+                raise ValueError(f"Choose a model for {role}")
+        for field in ("base_url", "target_base_url", "ollama_base_url"):
             parsed = urlparse(values.get(field, ""))
             if values.get(field) and (
                 parsed.scheme not in {"http", "https"}
@@ -156,6 +209,23 @@ class Settings:
                 or parsed.fragment
             ):
                 raise ValueError("Enter an HTTP(S) API base URL without credentials")
+        return values
+
+    def update(self, changes: dict) -> None:
+        values = self.preview(changes)
+        connection_fields = {
+            *MODEL_DEFAULTS,
+            "model",
+            "artifact_model",
+            "target_model",
+            "base_url",
+            "ollama_base_url",
+            "target_base_url",
+        }
+        if set(changes) & connection_fields:
+            for role in ("scenario", "artifact", "target", "judge"):
+                if not model_connection(values, role)["base_url"]:
+                    raise ValueError(f"Enter the service URL for {role}")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         os.fchmod(fd, 0o600)
@@ -306,6 +376,19 @@ class Coordinator:
                         self.state["stages"][stage]["generation_options"] = scenario_options(
                             config
                         )
+                    roles = {
+                        "scenarios": ("scenario",),
+                        "artifact": ("artifact",),
+                        "evaluation": ("target", "judge"),
+                    }.get(stage, ())
+                    self.state["stages"][stage]["models"] = {
+                        role: {
+                            key: value
+                            for key, value in model_connection(config, role).items()
+                            if key != "api_key"
+                        }
+                        for role in roles
+                    }
                     self._save()
                 env = {**os.environ, "ASAGO_DEMO_CONFIG": json.dumps(config)}
                 with self.lock:

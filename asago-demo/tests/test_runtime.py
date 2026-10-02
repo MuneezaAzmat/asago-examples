@@ -8,6 +8,101 @@ import pytest
 from asago_demo.runtime import Coordinator, Settings, redacted_file, safe_child
 
 
+def test_models_can_use_independent_services_without_leaking_litellm_key(tmp_path):
+    from asago_demo.runtime import model_connection
+
+    settings = Settings(
+        tmp_path,
+        defaults={
+            "base_url": "https://proxy.example/v1",
+            "api_key": "proxy-secret",
+            "model": "gemma",
+            "target_model": "qwen",
+            "target_base_url": "http://localhost:11434/v1",
+        },
+    )
+    settings.update(
+        {
+            "scenario_provider": "ollama",
+            "model": "qwen:14b",
+            "ollama_base_url": "http://localhost:11434",
+            "artifact_provider": "litellm",
+            "artifact_model": "gemma",
+            "target_provider": "litellm",
+            "target_model": "target-remote",
+            "judge_provider": "ollama",
+            "judge_model": "judge-local",
+        }
+    )
+    config = Settings(tmp_path, defaults={}).private()
+    assert model_connection(config, "scenario") == {
+        "provider": "ollama",
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "model": "qwen:14b",
+    }
+    assert model_connection(config, "artifact")["api_key"] == "proxy-secret"
+    assert model_connection(config, "target")["model"] == "target-remote"
+    assert model_connection(config, "target")["base_url"] == "https://proxy.example/v1"
+    assert model_connection(config, "judge")["api_key"] == "ollama"
+    assert model_connection(config, "judge")["model"] == "judge-local"
+    assert "proxy-secret" not in json.dumps(settings.public())
+
+
+def test_legacy_connections_and_inherited_models_are_preserved():
+    from asago_demo.runtime import model_connection
+
+    config = {
+        "base_url": "https://proxy.example/v1",
+        "api_key": "key",
+        "model": "gemma",
+        "artifact_model": "artifact-gemma",
+        "target_base_url": "http://custom:11434/v1",
+        "target_model": "qwen",
+    }
+    assert model_connection(config, "scenario")["model"] == "gemma"
+    assert model_connection(config, "artifact")["model"] == "artifact-gemma"
+    assert model_connection(config, "judge")["model"] == "artifact-gemma"
+    assert model_connection(config, "target")["base_url"] == "http://custom:11434/v1"
+    config.update(scenario_provider="ollama", artifact_model="")
+    assert model_connection(config, "judge")["provider"] == "ollama"
+    assert model_connection(config, "judge")["api_key"] == "ollama"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"scenario_provider": "other"},
+        {"target_provider": "same"},
+        {"artifact_provider": "ollama", "artifact_model": ""},
+        {"judge_provider": "litellm", "judge_model": ""},
+        {"ollama_base_url": "file:///private"},
+    ],
+)
+def test_invalid_model_configuration_is_not_saved(tmp_path, changes):
+    settings = Settings(tmp_path, defaults={})
+    with pytest.raises(ValueError):
+        settings.update(changes)
+    assert not settings.path.exists()
+
+
+def test_model_discovery_preview_does_not_save_drafts(tmp_path):
+    settings = Settings(tmp_path, defaults={"api_key": "saved-key"})
+    draft = settings.preview({"base_url": "https://draft.example/v1", "api_key": ""})
+    assert draft["api_key"] == "saved-key"
+    assert draft["base_url"] == "https://draft.example/v1"
+    assert not settings.path.exists()
+
+
+def test_saving_model_choices_requires_urls_only_for_selected_services(tmp_path):
+    settings = Settings(tmp_path, defaults={})
+    with pytest.raises(ValueError, match="URL"):
+        settings.update({"scenario_provider": "litellm", "model": "gemma", "base_url": ""})
+    assert not settings.path.exists()
+    settings.update({"scenario_provider": "ollama", "model": "qwen", "base_url": ""})
+    assert settings.private()["scenario_provider"] == "ollama"
+
+
 def wait_for_finish(coordinator):
     deadline = time.monotonic() + 5
     while coordinator.busy and time.monotonic() < deadline:
@@ -17,7 +112,14 @@ def wait_for_finish(coordinator):
 
 
 def test_secrets_are_preserved_but_never_returned(tmp_path):
-    settings = Settings(tmp_path, defaults={"api_key": "private-key", "model": "gemma"})
+    settings = Settings(
+        tmp_path,
+        defaults={
+            "api_key": "private-key",
+            "model": "gemma",
+            "base_url": "https://proxy.example/v1",
+        },
+    )
     settings.update({"api_key": "", "model": "new-model"})
     assert settings.private()["api_key"] == "private-key"
     public = settings.public()

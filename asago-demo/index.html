@@ -29,7 +29,9 @@
         >
           Light mode
         </button>
-        <button id="settings-open" class="quiet">Connection settings</button>
+        <button id="settings-open" class="quiet">
+          Models &amp; connections
+        </button>
       </nav>
     </header>
     <main>
@@ -176,6 +178,7 @@
           </p>
           <p id="run-generation-options" class="run-generation-options"></p>
         </form>
+        <p id="stage-model-summary" class="stage-model-summary"></p>
         <div id="results"></div>
       </section>
       <details id="logs" class="technical">
@@ -206,12 +209,12 @@ Logs will appear here when a stage starts.</pre
         >
       </footer>
     </main>
-    <dialog id="settings-dialog">
+    <dialog id="settings-dialog" aria-labelledby="models-title">
       <form id="settings-form">
         <div class="dialog-title">
           <div>
-            <p class="eyebrow">LOCAL CONFIGURATION</p>
-            <h2>Model connection</h2>
+            <p class="eyebrow">MODEL SELECTION</p>
+            <h2 id="models-title">Models &amp; connections</h2>
           </div>
           <button
             type="button"
@@ -223,60 +226,64 @@ Logs will appear here when a stage starts.</pre
           </button>
         </div>
         <p>
-          Used for live scenario and artifact generation. Policy results come
-          from the saved FS-ISAC extraction.
+          Choose LiteLLM or Ollama for each step. Policy Mapper uses the saved
+          extraction.
         </p>
-        <label
-          >API base URL<input
-            id="base-url"
-            type="url"
-            required
-            placeholder="https://your-endpoint/v1"
-        /></label>
-        <div class="field-row">
-          <label
-            >Scenario model<input id="model" required list="models" /></label
-          ><label
-            >Artifact model<input
-              id="artifact-model"
-              placeholder="Same as scenario model"
-              list="models"
-          /></label>
-        </div>
-        <datalist id="models"></datalist>
-        <label
-          >API key<input
-            id="api-key"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Leave blank to keep the configured key"
-        /></label>
-        <small id="key-state"></small>
-        <hr />
-        <h3>Garak target · Ollama</h3>
-        <p>
-          The generated conversation is replayed to this model. The generation
-          endpoint above supplies the judge.
+        <div id="model-roles" class="model-roles"></div>
+        <p class="model-help">
+          Choose a tool-capable model for the Garak target. Model lists show
+          availability; successful generation also depends on the model and
+          endpoint.
         </p>
-        <label
-          >Ollama API base URL<input
-            id="target-base-url"
-            type="url"
-            required
-            placeholder="http://127.0.0.1:11434/v1"
-        /></label>
-        <label
-          >Target model<input id="target-model" required list="target-models"
-        /></label>
-        <datalist id="target-models"></datalist>
-        <button type="button" id="target-check" class="secondary">
-          Check Ollama
-        </button>
+        <details class="service-connections" open>
+          <summary>Service connections</summary>
+          <div class="service-grid">
+            <section aria-labelledby="litellm-title">
+              <h3 id="litellm-title">LiteLLM</h3>
+              <label for="base-url">API base URL</label>
+              <input
+                id="base-url"
+                type="url"
+                placeholder="https://your-endpoint/v1"
+              />
+              <label for="api-key">API key</label>
+              <input
+                id="api-key"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Leave blank to keep the configured key"
+              />
+              <small id="key-state"></small>
+              <button type="button" id="litellm-models-load" class="secondary">
+                Load LiteLLM models
+              </button>
+              <p id="litellm-models-status" role="status"></p>
+            </section>
+            <section aria-labelledby="ollama-title">
+              <h3 id="ollama-title">Ollama</h3>
+              <label for="ollama-base-url">API base URL</label>
+              <input
+                id="ollama-base-url"
+                type="url"
+                placeholder="http://127.0.0.1:11434/v1"
+              />
+              <p>
+                Lists models already installed in Ollama. Use its local address
+                or a reachable Ollama server.
+              </p>
+              <button type="button" id="ollama-models-load" class="secondary">
+                Load Ollama models
+              </button>
+              <p id="ollama-models-status" role="status"></p>
+            </section>
+          </div>
+        </details>
         <p id="connection-state" role="status"></p>
         <div class="dialog-actions">
-          <button type="button" id="connection-check" class="secondary">
-            Check connection</button
-          ><button type="submit" class="primary">Save settings</button>
+          <span>Applies to future runs.</span
+          ><button id="models-save" type="submit" class="primary">
+            Save model choices
+          </button>
         </div>
       </form>
     </dialog>

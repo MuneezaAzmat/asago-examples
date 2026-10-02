@@ -17,6 +17,7 @@ from asago_demo.runtime import (  # noqa: E402
     SCENARIO_PROFILES,
     STAGES,
     atomic_json,
+    model_connection,
     redact_value,
     safe_child,
     scenario_options,
@@ -27,6 +28,7 @@ INPUTS = EXAMPLES / "asago-scenario-generator/inputs"
 
 
 def configure_environment(config):
+    connection = model_connection(config, "scenario")
     for variable in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
@@ -37,9 +39,9 @@ def configure_environment(config):
         os.environ[variable] = "1"
     os.environ.update(
         {
-            "ASAGO_SCENARIO_GENERATOR_MODEL_BASE_URL": config.get("base_url", ""),
-            "ASAGO_SCENARIO_GENERATOR_MODEL_NAME": config.get("model", "gemma-4-26b"),
-            "ASAGO_SCENARIO_GENERATOR_API_KEY": config.get("api_key", "none"),
+            "ASAGO_SCENARIO_GENERATOR_MODEL_BASE_URL": connection["base_url"],
+            "ASAGO_SCENARIO_GENERATOR_MODEL_NAME": connection["model"],
+            "ASAGO_SCENARIO_GENERATOR_API_KEY": connection["api_key"],
             "ASAGO_SCENARIO_GENERATOR_TEMPERATURE": "0.4",
             "ASAGO_SCENARIO_GENERATOR_TIMEOUT": str(config.get("timeout", 300)),
         }
@@ -144,6 +146,7 @@ def scenarios(run: Path, config: dict) -> dict:
     if not extraction.is_file():
         raise ValueError("Load the saved policy extraction first")
     options = scenario_options(config)
+    connection = model_connection(config, "scenario")
     print("Generating Klarna scenarios from this run's saved FS-ISAC extraction.", flush=True)
     print(
         f"Scenario configuration: {json.dumps(options)}; one technique per scenario.",
@@ -156,9 +159,9 @@ def scenarios(run: Path, config: dict) -> dict:
         output_dir=run / "scenario-generation",
         profile_path=INPUTS / "profiles" / SCENARIO_PROFILES[options["scenario_profile"]],
         qualification_facts_path=INPUTS / "profiles/klarna-qualification-facts.yaml",
-        base_url=config["base_url"],
-        api_key=config.get("api_key", "none"),
-        model=config["model"],
+        base_url=connection["base_url"],
+        api_key=connection["api_key"],
+        model=connection["model"],
         max_techniques=1,
         max_scenarios_per_pattern=options["max_scenarios_per_pattern"],
         generation_mode=options["generation_mode"],
@@ -191,11 +194,12 @@ def artifact(run: Path, config: dict) -> dict:
     reason = surface_skip_reason(ctx)
     if reason:
         raise ValueError(f"This scenario cannot run in Garak: {reason}")
-    model = config.get("artifact_model") or config["model"]
+    connection = model_connection(config, "artifact")
+    model = connection["model"]
     configure_llm(
         provider="openai",
-        base_url=config["base_url"],
-        api_key=config.get("api_key", "none"),
+        base_url=connection["base_url"],
+        api_key=connection["api_key"],
         model=model,
     )
     print(f"Generating Garak artifact for {ctx.scenario_id} with {model}.", flush=True)

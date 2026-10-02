@@ -10,7 +10,13 @@ import re
 import signal
 from pathlib import Path
 
-from asago_demo.runtime import atomic_json, redact_value, redacted_file, safe_child
+from asago_demo.runtime import (
+    atomic_json,
+    model_connection,
+    redact_value,
+    redacted_file,
+    safe_child,
+)
 
 GARAK_REVISION = "06aba1a2c9b142d561eeeff08dfaffcbe77487c3"
 DETECTOR = "injection_judge.InjectionJudge"
@@ -142,6 +148,8 @@ def summarize_report(path: Path) -> dict:
 
 
 def evaluation(run: Path, config: dict) -> dict:
+    target_connection = model_connection(config, "target")
+    judge_connection = model_connection(config, "judge")
     summary = json.loads((run / "artifact.json").read_text())
     if summary.get("status") != "completed" or not summary.get("validation", {}).get("ok"):
         raise ValueError("Generate and validate an artifact before running Garak")
@@ -178,18 +186,18 @@ def evaluation(run: Path, config: dict) -> dict:
     _config.reporting.report_dir = str(folder)
     _config.reporting.report_prefix = "garak"
     _config.plugins.target_type = "openai.OpenAICompatible"
-    _config.plugins.target_name = config["target_model"]
+    _config.plugins.target_name = target_connection["model"]
     _config.transient.starttime = datetime.now()
     _config.transient.starttime_iso = _config.transient.starttime.isoformat()
     command.start_run()
     target = OpenAICompatible(
-        name=config["target_model"],
+        name=target_connection["model"],
         config_root={
             "generators": {
                 "openai": {
                     "OpenAICompatible": {
-                        "uri": config["target_base_url"],
-                        "api_key": "ollama",
+                        "uri": target_connection["base_url"],
+                        "api_key": target_connection["api_key"],
                         "temperature": 0,
                         "stop": [],
                         "max_tokens": 1024,
@@ -217,11 +225,11 @@ def evaluation(run: Path, config: dict) -> dict:
                 "injection_judge": {
                     "InjectionJudge": {
                         "detector_model_type": "openai.OpenAICompatible",
-                        "detector_model_name": config.get("artifact_model") or config["model"],
+                        "detector_model_name": judge_connection["model"],
                         "confidence_cutoff": 70,
                         "detector_model_config": {
-                            "uri": config["base_url"],
-                            "api_key": config.get("api_key", "none"),
+                            "uri": judge_connection["base_url"],
+                            "api_key": judge_connection["api_key"],
                             "temperature": 0,
                             "stop": [],
                             "max_tokens": 1024,
@@ -239,8 +247,8 @@ def evaluation(run: Path, config: dict) -> dict:
 
     def logged_generate(*args, **kwargs):
         print(
-            f"Garak is replaying {len(entry['messages'])} turns to {config['target_model']} "
-            "on Ollama.",
+            f"Garak is replaying {len(entry['messages'])} turns to {target_connection['model']} "
+            f"on {target_connection['provider']}.",
             flush=True,
         )
         outputs = original_generate(*args, **kwargs)
@@ -289,9 +297,11 @@ def evaluation(run: Path, config: dict) -> dict:
             else "No usable target response or judge result. Inspect the Garak report."
         ),
         "source": "live",
-        "target_model": config["target_model"],
-        "target_base_url": config["target_base_url"],
-        "judge_model": config.get("artifact_model") or config["model"],
+        "target_model": target_connection["model"],
+        "target_base_url": target_connection["base_url"],
+        "target_provider": target_connection["provider"],
+        "judge_model": judge_connection["model"],
+        "judge_provider": judge_connection["provider"],
         "scenario_id": summary["scenario_id"],
         "artifact_file": summary["file"],
         "conversation_file": str(source.relative_to(run)),

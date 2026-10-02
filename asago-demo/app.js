@@ -18,7 +18,7 @@ let scenarioSearch = "",
   surfaceFilter = "";
 let observedActiveId = null;
 let scenarioOptionsDirty = false;
-const { chooseRunId, canRenderResult } = window.AsagoViewState;
+const { chooseRunId, canRenderResult, resolveModel } = window.AsagoViewState;
 const names = {
   policy: "Policy Mapper",
   scenarios: "Scenario Generator",
@@ -39,7 +39,7 @@ const descriptions = {
   artifact:
     "Live generation · Inspect the attack transcript, detector rubric, and validation evidence.",
   evaluation:
-    "Live evaluation · Replay the artifact against Qwen on Ollama and inspect Garak’s judgment.",
+    "Live evaluation · Replay the artifact against the selected target and inspect Garak’s judgment.",
 };
 
 async function api(route, data) {
@@ -104,6 +104,24 @@ function controls() {
   $("#history").disabled = !!busy;
   $("#settings-open").disabled = !!busy;
   renderScenarioOptions(busy);
+  const roles =
+    {
+      scenarios: ["scenario"],
+      artifact: ["artifact"],
+      evaluation: ["target", "judge"],
+    }[activeTab] || [];
+  const recordedModels = run?.stages?.[activeTab]?.models;
+  $("#stage-model-summary").hidden = !roles.length;
+  $("#stage-model-summary").textContent =
+    (recordedModels ? "This run: " : "Next run: ") +
+    roles
+      .map((role) => {
+        const choice =
+          recordedModels?.[role] ||
+          resolveModel(snapshot?.settings || {}, role);
+        return `${role === "target" ? "Target" : role === "judge" ? "Judge" : "Model"}: ${serviceName(choice.provider)} · ${choice.model || "Choose model"}`;
+      })
+      .join(" / ");
   const info = run?.stages?.[activeTab];
   const upstream = {
     scenarios: "policy",
@@ -269,7 +287,7 @@ function renderEvaluation(data) {
   };
   const attempts = data.attempts || [];
   const confidence = attempts[0]?.confidence;
-  return `<div class="results-inner"><div class="evaluation-verdict ${data.outcome === "attack_succeeded" ? "hit" : ""}"><span class="badge">Live model test</span><h3>${escapeHTML(labels[data.outcome] || "Evaluation result")}</h3><p>${escapeHTML(data.target_model)} · Ollama · ${attempts.length} response${attempts.length === 1 ? "" : "s"} evaluated</p></div><div class="metrics">${metric(confidence == null ? "—" : confidence + "/100", "Judge confidence in attack success")}${metric(data.threshold || 70, "Success cutoff")}${metric(data.judge_model || "—", "Judge model")}</div><div class="trace"><small>ARTIFACT → TARGET → JUDGE</small>${escapeHTML(data.scenario_id)}<br><small>Real model response to the artifact’s replayed context. Proposed tool calls are captured; external tools are not executed. One scenario does not establish overall model safety.</small></div>${attempts.map((a, i) => `<article class="turn"><header><span>${i + 1} / ${escapeHTML(data.target_model)} response</span><span class="badge">${escapeHTML(labels[a.outcome])}</span></header><pre>${escapeHTML(a.response || "The model responded with tool calls.")}</pre>${a.tool_calls?.length ? "<h4>Proposed tool calls</h4>" + code(a.tool_calls) : ""}</article><div class="judge-reason"><h3>Why Garak reached this result</h3><p>${escapeHTML(a.reasoning)}</p></div>`).join("")}<div class="report-toolbar"><span>Garak PR #11 · InjectionJudge</span><div>${download(data.report_file, "Garak report JSONL")}${download(data.conversation_file, "Replayed conversation")}${download(data.artifact_file, "Source artifact")}</div></div><details class="technical"><summary>Execution details</summary>${code({ target: data.target_base_url, model: data.target_model, judge: data.judge_model, probe: "injection.IndirectInjection", detector: "injection_judge.InjectionJudge", revision: data.garak_revision, tool_execution: false })}</details></div>`;
+  return `<div class="results-inner"><div class="evaluation-verdict ${data.outcome === "attack_succeeded" ? "hit" : ""}"><span class="badge">Live model test</span><h3>${escapeHTML(labels[data.outcome] || "Evaluation result")}</h3><p>${escapeHTML(data.target_model)} · ${escapeHTML(serviceName(data.target_provider || "ollama"))} · ${attempts.length} response${attempts.length === 1 ? "" : "s"} evaluated</p></div><div class="metrics">${metric(confidence == null ? "—" : confidence + "/100", "Judge confidence in attack success")}${metric(data.threshold || 70, "Success cutoff")}${metric(data.judge_model || "—", "Judge model")}</div><div class="trace"><small>ARTIFACT → TARGET → JUDGE</small>${escapeHTML(data.scenario_id)}<br><small>Real model response to the artifact’s replayed context. Proposed tool calls are captured; external tools are not executed. One scenario does not establish overall model safety.</small></div>${attempts.map((a, i) => `<article class="turn"><header><span>${i + 1} / ${escapeHTML(data.target_model)} response</span><span class="badge">${escapeHTML(labels[a.outcome])}</span></header><pre>${escapeHTML(a.response || "The model responded with tool calls.")}</pre>${a.tool_calls?.length ? "<h4>Proposed tool calls</h4>" + code(a.tool_calls) : ""}</article><div class="judge-reason"><h3>Why Garak reached this result</h3><p>${escapeHTML(a.reasoning)}</p></div>`).join("")}<div class="report-toolbar"><span>Garak PR #11 · InjectionJudge</span><div>${download(data.report_file, "Garak report JSONL")}${download(data.conversation_file, "Replayed conversation")}${download(data.artifact_file, "Source artifact")}</div></div><details class="technical"><summary>Execution details</summary>${code({ target: data.target_base_url, model: data.target_model, judge: data.judge_model, probe: "injection.IndirectInjection", detector: "injection_judge.InjectionJudge", revision: data.garak_revision, tool_execution: false })}</details></div>`;
 }
 function render() {
   controls();
@@ -343,7 +361,9 @@ function render() {
         evaluation:
           "Generate a validated artifact, then replay it against " +
           (snapshot?.settings?.target_model || "Qwen") +
-          " on Ollama. Garak evaluates the real reply and proposed tool calls using the artifact’s rubric.",
+          " via " +
+          serviceName(snapshot?.settings?.target_provider || "ollama") +
+          ". Garak evaluates the real reply and proposed tool calls using the artifact’s rubric.",
       }[activeTab],
     );
   }
@@ -363,7 +383,9 @@ async function poll() {
       selectedScenario = "";
       return await poll();
     }
-    $("#model-label").textContent = data.settings.model || "Configure endpoint";
+    const scenarioModel = resolveModel(data.settings, "scenario");
+    $("#model-label").textContent =
+      `${serviceName(scenarioModel.provider)} · ${scenarioModel.model || "Choose model"}`;
     const historyHTML =
       (data.history.length
         ? ""
@@ -470,78 +492,198 @@ setTheme(localStorage.getItem("asago-demo-dark") !== "false");
 $("#theme").addEventListener("click", () =>
   setTheme(!document.documentElement.classList.contains("pf-v6-theme-dark")),
 );
+const modelRoles = {
+  scenario: "Scenario generation",
+  artifact: "Artifact generation",
+  target: "Garak target",
+  judge: "Garak judge",
+};
+let modelDraft = {},
+  modelLists = {},
+  modelManual = {},
+  discoveryVersion = 0;
+function serviceName(provider) {
+  return provider === "ollama" ? "Ollama" : "LiteLLM";
+}
+function modelKey(role) {
+  return role === "scenario" ? "model" : `${role}_model`;
+}
+function discoverySignature(provider) {
+  return provider === "litellm"
+    ? `${$("#base-url").value.trim()}|${$("#api-key").value}`
+    : $("#ollama-base-url").value.trim();
+}
+function renderModelChoices() {
+  for (const role of Object.keys(modelRoles)) {
+    const provider = resolveModel(modelDraft, role).provider;
+    const inherited = modelDraft[`${role}_provider`] === "same";
+    const current = modelDraft[modelKey(role)] || "";
+    const select = $(`#${role}-model-choice`);
+    const catalog = modelLists[provider];
+    const models =
+      catalog?.signature === discoverySignature(provider) ? catalog.models : [];
+    const choices = [
+      ...new Set([
+        ...models,
+        ...(!modelManual[role] && current ? [current] : []),
+      ]),
+    ];
+    select.innerHTML =
+      `<option value="">${inherited ? "Same model as " + (role === "judge" ? "artifact generation" : "scenario generation") : "Choose a model…"}</option>` +
+      choices
+        .map(
+          (model) =>
+            `<option value="${escapeHTML(model)}">${escapeHTML(model)}</option>`,
+        )
+        .join("") +
+      '<option value="__manual__">Enter a model name…</option>';
+    select.value = modelManual[role] ? "__manual__" : current;
+    select.required = !inherited;
+    const custom = $(`#${role}-model-custom`);
+    custom.hidden = !modelManual[role];
+    custom.required = !!modelManual[role];
+    if (document.activeElement !== custom) custom.value = current;
+    const resolved = resolveModel(modelDraft, role);
+    $(`#${role}-model-resolved`).textContent = resolved.model
+      ? `${serviceName(resolved.provider)} · ${resolved.model}`
+      : `Choose a ${serviceName(resolved.provider)} model.`;
+  }
+}
+async function loadProviderModels(provider) {
+  const button = $(`#${provider}-models-load`),
+    status = $(`#${provider}-models-status`);
+  const version = discoveryVersion,
+    signature = discoverySignature(provider);
+  button.disabled = true;
+  status.textContent = "Loading models…";
+  try {
+    const result = await api("/api/models", {
+      provider,
+      base_url: $(
+        provider === "litellm" ? "#base-url" : "#ollama-base-url",
+      ).value.trim(),
+      ...(provider === "litellm" ? { api_key: $("#api-key").value } : {}),
+    });
+    if (
+      version !== discoveryVersion ||
+      signature !== discoverySignature(provider)
+    )
+      return;
+    modelLists[provider] = { signature, models: result.models };
+    status.textContent = result.models.length
+      ? `${result.models.length} models available.`
+      : "No models returned. Install or configure a model, then reload.";
+    renderModelChoices();
+  } catch (error) {
+    if (
+      version !== discoveryVersion ||
+      signature !== discoverySignature(provider)
+    )
+      return;
+    status.textContent = `Could not load models: ${error.message} You can enter a model name manually.`;
+  } finally {
+    if (version === discoveryVersion) button.disabled = false;
+  }
+}
 $("#settings-open").addEventListener("click", () => {
   const s = snapshot.settings;
+  discoveryVersion++;
+  modelDraft = { ...s };
+  modelLists = {};
+  modelManual = {};
   $("#base-url").value = s.base_url || "";
-  $("#model").value = s.model || "";
-  $("#artifact-model").value = s.artifact_model || "";
   $("#api-key").value = "";
-  $("#target-base-url").value = s.target_base_url || "";
-  $("#target-model").value = s.target_model || "";
+  $("#ollama-base-url").value =
+    s.ollama_base_url || s.target_base_url || "http://127.0.0.1:11434/v1";
   $("#key-state").textContent = s.api_key_configured
-    ? "A key is configured locally. It is never displayed here."
+    ? "A key is configured locally."
     : "No API key configured.";
+  $("#connection-state").textContent = "";
+  $("#model-roles").innerHTML = Object.entries(modelRoles)
+    .map(
+      ([role, label]) =>
+        `<div class="model-role"><h3>${label}</h3><div><label for="${role}-provider">${label} service</label><select id="${role}-provider">${["artifact", "judge"].includes(role) ? `<option value="same">Same service as ${role === "judge" ? "artifact" : "scenario"}</option>` : ""}<option value="litellm">LiteLLM</option><option value="ollama">Ollama</option></select></div><div><label for="${role}-model-choice">${label} model</label><select id="${role}-model-choice"></select><input id="${role}-model-custom" aria-label="${label} custom model" placeholder="Exact served model name" hidden /><small id="${role}-model-resolved"></small></div></div>`,
+    )
+    .join("");
+  for (const role of Object.keys(modelRoles)) {
+    const provider = $(`#${role}-provider`);
+    provider.value =
+      s[`${role}_provider`] ||
+      { scenario: "litellm", target: "ollama" }[role] ||
+      "same";
+    modelDraft[`${role}_provider`] = provider.value;
+    provider.addEventListener("change", () => {
+      modelDraft[`${role}_provider`] = provider.value;
+      modelDraft[modelKey(role)] = "";
+      modelManual[role] = false;
+      renderModelChoices();
+      const service = resolveModel(modelDraft, role).provider;
+      if (modelLists[service]?.signature !== discoverySignature(service))
+        loadProviderModels(service);
+    });
+    $(`#${role}-model-choice`).addEventListener("change", (event) => {
+      modelManual[role] = event.target.value === "__manual__";
+      modelDraft[modelKey(role)] = modelManual[role] ? "" : event.target.value;
+      renderModelChoices();
+      if (modelManual[role]) $(`#${role}-model-custom`).focus();
+    });
+    $(`#${role}-model-custom`).addEventListener("input", (event) => {
+      modelDraft[modelKey(role)] = event.target.value;
+      renderModelChoices();
+    });
+  }
+  renderModelChoices();
   $("#settings-dialog").showModal();
+  for (const provider of ["litellm", "ollama"]) {
+    $(`#${provider}-models-load`).disabled = false;
+    if ($(provider === "litellm" ? "#base-url" : "#ollama-base-url").value)
+      loadProviderModels(provider);
+    else
+      $(`#${provider}-models-status`).textContent =
+        "Enter the service URL to load models.";
+  }
 });
 $("#settings-close").addEventListener("click", () =>
   $("#settings-dialog").close(),
 );
-async function saveSettings() {
-  return api("/api/settings", {
-    base_url: $("#base-url").value,
-    model: $("#model").value,
-    artifact_model: $("#artifact-model").value,
-    api_key: $("#api-key").value,
-    target_base_url: $("#target-base-url").value,
-    target_model: $("#target-model").value,
+$("#settings-dialog").addEventListener("close", () => {
+  discoveryVersion++;
+});
+for (const provider of ["litellm", "ollama"]) {
+  $(`#${provider}-models-load`).addEventListener("click", () =>
+    loadProviderModels(provider),
+  );
+}
+for (const selector of ["#base-url", "#ollama-base-url", "#api-key"]) {
+  $(selector).addEventListener("input", () => {
+    const provider = selector === "#ollama-base-url" ? "ollama" : "litellm";
+    $(`#${provider}-models-status`).textContent =
+      "Connection changed. Reload models to refresh the list.";
+    renderModelChoices();
   });
 }
-$("#settings-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+$("#settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("#models-save").disabled = true;
   try {
-    await saveSettings();
+    const choices = Object.fromEntries(
+      Object.keys(modelRoles).flatMap((role) => [
+        [`${role}_provider`, modelDraft[`${role}_provider`]],
+        [modelKey(role), (modelDraft[modelKey(role)] || "").trim()],
+      ]),
+    );
+    await api("/api/settings", {
+      ...choices,
+      base_url: $("#base-url").value.trim(),
+      ollama_base_url: $("#ollama-base-url").value.trim(),
+      api_key: $("#api-key").value,
+    });
     $("#settings-dialog").close();
     await poll();
   } catch (error) {
     $("#connection-state").textContent = error.message;
-  }
-});
-$("#connection-check").addEventListener("click", async () => {
-  const button = $("#connection-check");
-  button.disabled = true;
-  $("#connection-state").textContent = "Checking the model endpoint…";
-  try {
-    await saveSettings();
-    const result = await api("/api/check", {});
-    $("#models").innerHTML = result.models
-      .map((m) => `<option value="${escapeHTML(m)}"></option>`)
-      .join("");
-    $("#connection-state").textContent = result.ready
-      ? "Connected. The selected model is available."
-      : "Connected. Choose an available model: " + result.models.join(", ");
-  } catch (error) {
-    $("#connection-state").textContent = error.message;
   } finally {
-    button.disabled = false;
-  }
-});
-$("#target-check").addEventListener("click", async () => {
-  const button = $("#target-check");
-  button.disabled = true;
-  $("#connection-state").textContent = "Checking Ollama…";
-  try {
-    await saveSettings();
-    const result = await api("/api/check-target", {});
-    $("#target-models").innerHTML = result.models
-      .map((m) => `<option value="${escapeHTML(m)}"></option>`)
-      .join("");
-    $("#connection-state").textContent = result.ready
-      ? "Ollama is ready. The target model is installed."
-      : "Choose an installed model: " + result.models.join(", ");
-  } catch (error) {
-    $("#connection-state").textContent = error.message;
-  } finally {
-    button.disabled = false;
+    $("#models-save").disabled = false;
   }
 });
 async function tick() {

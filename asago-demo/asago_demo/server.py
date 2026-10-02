@@ -14,7 +14,15 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_TEMPLATES = ROOT / ".cache/policy-report/src/asago_policy_mapper/templates"
 sys.path.insert(0, str(ROOT))
 
-from asago_demo.runtime import Coordinator, Settings, redacted_file, safe_child  # noqa: E402
+from asago_demo.runtime import (  # noqa: E402
+    Coordinator,
+    Settings,
+    model_connection,
+    provider_connection,
+    redact_value,
+    redacted_file,
+    safe_child,
+)
 
 
 def make_handler(coordinator):
@@ -147,21 +155,56 @@ def make_handler(coordinator):
                         raise ValueError("Wait for the current run before changing settings")
                     coordinator.settings.update(data)
                     return self.send(coordinator.settings.public())
+                if self.path == "/api/models":
+                    import httpx
+
+                    if set(data) - {"provider", "base_url", "api_key"}:
+                        raise ValueError("Unknown model discovery field")
+                    provider = data.get("provider")
+                    if provider not in ("litellm", "ollama"):
+                        raise ValueError("Choose LiteLLM or Ollama")
+                    changes = {}
+                    if "base_url" in data:
+                        changes["base_url" if provider == "litellm" else "ollama_base_url"] = data[
+                            "base_url"
+                        ]
+                    if provider == "litellm" and "api_key" in data:
+                        changes["api_key"] = data["api_key"]
+                    settings = coordinator.settings.preview(changes)
+                    connection = provider_connection(settings, provider)
+                    if not connection["base_url"]:
+                        raise ValueError("Enter the service URL before loading models")
+                    try:
+                        response = httpx.get(
+                            connection["base_url"] + "/models",
+                            headers={"Authorization": "Bearer " + connection["api_key"]},
+                            timeout=20,
+                        )
+                        response.raise_for_status()
+                        models = sorted(
+                            {
+                                entry["id"]
+                                for entry in response.json().get("data", [])
+                                if isinstance(entry.get("id"), str)
+                            }
+                        )
+                    except Exception as exc:
+                        raise ValueError(redact_value(str(exc), settings)) from None
+                    return self.send({"provider": provider, "models": models})
                 if self.path in {"/api/check", "/api/check-target"}:
                     import httpx
 
                     settings = coordinator.settings.private()
                     target = self.path == "/api/check-target"
-                    url = settings["target_base_url" if target else "base_url"]
-                    key = "ollama" if target else settings.get("api_key", "none")
+                    connection = model_connection(settings, "target" if target else "scenario")
                     response = httpx.get(
-                        url.rstrip("/") + "/models",
-                        headers={"Authorization": "Bearer " + key},
+                        connection["base_url"] + "/models",
+                        headers={"Authorization": "Bearer " + connection["api_key"]},
                         timeout=20,
                     )
                     response.raise_for_status()
                     models = [entry["id"] for entry in response.json().get("data", [])]
-                    model = settings["target_model" if target else "model"]
+                    model = connection["model"]
                     return self.send({"models": models, "ready": model in models})
                 return self.send({"error": "Not found"}, code=404)
             except Exception as exc:
