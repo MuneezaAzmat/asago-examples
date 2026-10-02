@@ -23,6 +23,12 @@ Open **http://127.0.0.1:8765**. Keep the server running. Connection settings can
 also be edited in the dashboard; saved credentials stay in an ignored local file.
 The workspace root `.env` is supported, with `asago-demo/.env` taking precedence.
 
+If another local app uses port 8765, run `./asago-demo/launch.sh --port 8766` and
+open `http://127.0.0.1:8766` instead. In the notebooks use
+`DemoClient(base_url="http://127.0.0.1:8766")`. An HTML response from the controller
+API usually means the browser reached another server; this can also happen when
+IPv4 and IPv6 listeners from different apps share the same port.
+
 Open **Models & connections** to choose a service and model separately for scenario
 generation, artifact generation, the Garak target, and the Garak judge. Each role
 can use **LiteLLM** or **Ollama** through its OpenAI-compatible API. Artifact

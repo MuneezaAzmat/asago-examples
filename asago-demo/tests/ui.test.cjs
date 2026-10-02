@@ -6,6 +6,26 @@ const {
   resolveModel,
 } = require("../view-state.js");
 
+test("an HTML response identifies a wrong demo server instead of a JSON syntax error", async () => {
+  const { readAPIResponse } = require("../view-state.js");
+  const response = new Response(
+    "<!DOCTYPE HTML><title>Error response</title>",
+    {
+      status: 501,
+      headers: { "Content-Type": "text/html" },
+    },
+  );
+  await assert.rejects(() => readAPIResponse(response), /port.*another app/);
+  assert.deepEqual(
+    await readAPIResponse(
+      new Response('{"models":["qwen"]}', {
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+    { models: ["qwen"] },
+  );
+});
+
 test("inherited roles follow the selected service and independent overrides", () => {
   const config = {
     scenario_provider: "ollama",

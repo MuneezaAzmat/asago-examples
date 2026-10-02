@@ -53,7 +53,7 @@ async function api(route, data) {
           body: JSON.stringify(data),
         },
   );
-  const result = await response.json();
+  const result = await window.AsagoViewState.readAPIResponse(response);
   if (!response.ok) throw new Error(result.error || "The request failed.");
   return result;
 }

@@ -32,7 +32,22 @@
     }
     return { provider, model };
   }
-  const exports = { chooseRunId, canRenderResult, resolveModel };
+  async function readAPIResponse(response) {
+    if (
+      !(response.headers.get("content-type") || "").includes("application/json")
+    ) {
+      throw new Error(
+        `The local demo returned a non-JSON response (HTTP ${response.status}). Its port may belong to another app. Restart Asago on a free port and open the new URL.`,
+      );
+    }
+    return response.json();
+  }
+  const exports = {
+    chooseRunId,
+    canRenderResult,
+    resolveModel,
+    readAPIResponse,
+  };
   if (typeof module !== "undefined") module.exports = exports;
   else root.AsagoViewState = exports;
 })(typeof window === "undefined" ? {} : window);
