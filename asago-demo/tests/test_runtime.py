@@ -158,6 +158,7 @@ def test_scenario_choices_persist_without_replacing_connection_settings(tmp_path
     "changes",
     [
         {"scenario_profile": "../custom.yaml"},
+        {"scenario_scope": "unbounded"},
         {"generation_mode": "unknown"},
         {"max_scenarios_per_pattern": 0},
         {"max_scenarios_per_pattern": 11},
@@ -183,7 +184,7 @@ config = json.loads(os.environ['ASAGO_DEMO_CONFIG'])
 result = {'status': 'completed'}
 if stage == 'scenarios':
     result['options_received'] = {key: config[key] for key in
-        ('scenario_profile', 'generation_mode', 'max_scenarios_per_pattern')}
+        ('scenario_scope', 'scenario_profile', 'generation_mode', 'max_scenarios_per_pattern')}
 (root / (stage + '.json')).write_text(json.dumps(result))
 """
     c = make_coordinator(tmp_path, monkeypatch, code)
@@ -197,6 +198,7 @@ if stage == 'scenarios':
     c.start("all")
     state = wait_for_finish(c)
     expected = {
+        "scenario_scope": "full",
         "scenario_profile": "full",
         "generation_mode": "exhaustive",
         "max_scenarios_per_pattern": 2,

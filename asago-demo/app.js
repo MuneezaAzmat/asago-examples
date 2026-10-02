@@ -155,16 +155,20 @@ function controls() {
   }
 }
 function readScenarioOptions() {
+  const scope = $("#scenario-scope").value;
+  const quick = scope !== "full";
   return {
+    scenario_scope: scope,
     scenario_profile: $("#scenario-profile").value,
-    generation_mode: $("#generation-mode").value,
-    max_scenarios_per_pattern: $("#pattern-limit").valueAsNumber,
+    generation_mode: quick ? "exhaustive" : $("#generation-mode").value,
+    max_scenarios_per_pattern: quick ? 1 : $("#pattern-limit").valueAsNumber,
   };
 }
 function renderScenarioOptions(busy) {
   $("#scenario-options").hidden = activeTab !== "scenarios";
   if (!scenarioOptionsDirty && snapshot?.settings) {
     const settings = snapshot.settings;
+    $("#scenario-scope").value = settings.scenario_scope || "full";
     $("#scenario-profile").value = settings.scenario_profile || "direct";
     $("#generation-mode").value = settings.generation_mode || "coverage";
     $("#pattern-limit").value = settings.max_scenarios_per_pattern ?? 1;
@@ -175,30 +179,52 @@ function renderScenarioOptions(busy) {
       el.disabled = !!busy || !snapshot;
     });
   const options = readScenarioOptions();
+  const quick = options.scenario_scope !== "full";
+  if (quick) {
+    $("#generation-mode").value = "exhaustive";
+    $("#pattern-limit").value = 1;
+    $("#generation-mode").disabled = true;
+    $("#pattern-limit").disabled = true;
+  }
+  $("#scope-help").textContent = quick
+    ? `Checks only 3 attack patterns before generation. One scenario per pattern; normal validation still applies.`
+    : "Searches all eligible attack patterns before selecting final scenarios. More model calls.";
   const full = options.scenario_profile === "full";
   const coverage = options.generation_mode === "coverage";
   $("#profile-help").textContent = full
     ? "User messages, retrieved knowledge (RAG), and authenticated customer context."
     : "User messages through the Klarna app and web. The quick demo profile.";
-  $("#mode-help").textContent = coverage
-    ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
-    : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
-  $("#limit-help").textContent = coverage
-    ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
-    : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
-  $("#generation-expectation").textContent = coverage
-    ? full
-      ? "Current selection: aim to cover 3 input entry points with one admitted scenario each."
-      : "Current selection: aim for 1 admitted scenario for the single input entry point."
-    : `Current selection: attempt up to ${Number.isInteger(options.max_scenarios_per_pattern) ? options.max_scenarios_per_pattern : "…"} ${options.max_scenarios_per_pattern === 1 ? "scenario" : "scenarios"} per eligible attack pattern across ${full ? "3 input entry points" : "1 input entry point"}.`;
+  $("#mode-help").textContent = quick
+    ? "Quick demo explores only the preset's 3 patterns. This mode is fixed for the preset."
+    : coverage
+      ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
+      : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
+  $("#limit-help").textContent = quick
+    ? "Fixed at one scenario per selected pattern to keep the demo small. Rejected scenarios stay in quarantine."
+    : coverage
+      ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
+      : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
+  $("#generation-expectation").textContent = quick
+    ? `Quick demo: check 3 attack patterns and generate up to 3 validated scenarios. Limited scope: misinformation, fabricated endpoints and reference data.`
+    : coverage
+      ? full
+        ? "Current selection: aim to cover 3 input entry points with one admitted scenario each."
+        : "Current selection: aim for 1 admitted scenario for the single input entry point."
+      : `Current selection: attempt up to ${Number.isInteger(options.max_scenarios_per_pattern) ? options.max_scenarios_per_pattern : "…"} ${options.max_scenarios_per_pattern === 1 ? "scenario" : "scenarios"} per eligible attack pattern across ${full ? "3 input entry points" : "1 input entry point"}.`;
   const stage = snapshot?.run?.stages?.scenarios;
   const recorded = stage?.generation_options;
   const label = $("#run-generation-options");
   label.hidden = !stage || stage.status === "pending";
   label.textContent = recorded
-    ? `${stage.status === "running" ? "Running with" : "Displayed run used"}: ${recorded.scenario_profile === "full" ? "Full Klarna · 3 input entry points" : "Direct input · 1 entry point"} / ${recorded.generation_mode === "coverage" ? "Cover entry points" : "Explore attack patterns"} / per-pattern limit ${recorded.max_scenarios_per_pattern}.`
+    ? `${stage.status === "running" ? "Running with" : "Displayed run used"}: ${scopeLabel(recorded.scenario_scope)} / ${recorded.scenario_profile === "full" ? "Full Klarna · 3 input entry points" : "Direct input · 1 entry point"} / ${recorded.generation_mode === "coverage" ? "Cover entry points" : "Explore attack patterns"} / per-pattern limit ${recorded.max_scenarios_per_pattern}.`
     : "This saved run predates option tracking; its generation settings were not recorded.";
 }
+function scopeLabel(scope) {
+  return scope === "quick3"
+    ? "Quick demo · up to 3 scenarios"
+    : "Full candidate search";
+}
+
 function formatTime(seconds) {
   const n = Math.max(0, Math.floor(seconds));
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
@@ -261,7 +287,7 @@ function renderActivity() {
       const detail = [
         stage === "policy" ? "Saved extraction · no model call" : models,
         options
-          ? `${options.scenario_profile === "direct" ? "Direct input · 1 entry point" : "Full Klarna · 3 entry points"} / ${options.generation_mode} / per-pattern limit ${options.max_scenarios_per_pattern}`
+          ? `${scopeLabel(options.scenario_scope)} / ${options.scenario_profile === "direct" ? "Direct input · 1 entry point" : "Full Klarna · 3 entry points"} / ${options.generation_mode} / per-pattern limit ${options.max_scenarios_per_pattern}`
           : "",
         stage !== "policy" && info.timeout
           ? info.timeout_scope === "evaluation"

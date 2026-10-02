@@ -139,6 +139,33 @@ def summarize_scenarios(run: Path, run_dir: Path) -> dict:
     }
 
 
+def prepare_demo_scope(run: Path, scope: str) -> Path | None:
+    """Use the pipeline's public threat input to bound seeds before LLM filtering."""
+    if scope == "full":
+        return None
+    import yaml
+    from asago_scenario_generator.data.loaders import load_attack_patterns
+    from asago_scenario_generator.data.paths import DATA_ROOT
+
+    selected = {"T5"}
+    expected = {"AP-T5-01", "AP-T5-02", "AP-T5-04"}
+    actual = {p["id"] for p in load_attack_patterns().values() if p["threat_id"] in selected}
+    if actual != expected:
+        raise ValueError("The installed attack catalog changed. Update the quick demo preset.")
+    source = DATA_ROOT / "taxonomies/owasp-agentic-threats/owasp-agentic-threats-v1.1.yaml"
+    data = yaml.safe_load(source.read_text())
+    data["threats"] = {key: value for key, value in data["threats"].items() if key in selected}
+    path = run / f"{scope}-threats.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    print(
+        f"[Stage Demo scope] Checking only {len(expected)} attack patterns: "
+        + ", ".join(sorted(expected))
+        + ". Up to one scenario per pattern; validation stays enabled.",
+        flush=True,
+    )
+    return path
+
+
 def scenarios(run: Path, config: dict) -> dict:
     from asago_scenario_generator.pipeline.runner import run_pipeline
 
@@ -147,6 +174,7 @@ def scenarios(run: Path, config: dict) -> dict:
         raise ValueError("Load the saved policy extraction first")
     options = scenario_options(config)
     connection = model_connection(config, "scenario")
+    threats_path = prepare_demo_scope(run, options["scenario_scope"])
     print("Generating Klarna scenarios from this run's saved FS-ISAC extraction.", flush=True)
     print(
         f"Scenario configuration: {json.dumps(options)}; one technique per scenario.",
@@ -159,6 +187,7 @@ def scenarios(run: Path, config: dict) -> dict:
         output_dir=run / "scenario-generation",
         profile_path=INPUTS / "profiles" / SCENARIO_PROFILES[options["scenario_profile"]],
         qualification_facts_path=INPUTS / "profiles/klarna-qualification-facts.yaml",
+        threats_path=threats_path,
         base_url=connection["base_url"],
         api_key=connection["api_key"],
         model=connection["model"],
@@ -168,6 +197,9 @@ def scenarios(run: Path, config: dict) -> dict:
         eval=True,
     )
     data = summarize_scenarios(run, Path(result.run_dir))
+    data["generation_options"] = options
+    if threats_path:
+        data["scope_file"] = threats_path.name
     print(
         f"Scenarios: {data['admitted']} admitted, {data['quarantined']} quarantined.", flush=True
     )

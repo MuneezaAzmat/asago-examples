@@ -90,6 +90,16 @@ The Scenario Generator tab exposes the settings used by both **Run scenarios**
 and **Run demo**. Changes are saved when scenario generation starts. The defaults
 remain the quick direct-input profile, coverage mode, and a per-pattern limit of 1.
 
+- **Demo size:** Quick demo restricts the threat input before seed expansion and
+  model filtering to three T5 patterns: misinformation accumulation (AP-T5-01),
+  fabricated endpoints (AP-T5-02), and reference-data manipulation (AP-T5-04).
+  It fixes exhaustive generation and the per-pattern limit at 1, so at most
+  3 scenarios can be admitted. Qualification, generation repair, and validation
+  still run; fewer scenarios can pass. This is a deliberately narrow demonstration,
+  not broad threat coverage. The generated threat input stays with the run for
+  provenance. **Full candidate search** keeps the original behavior and exposes
+  the mode/variant controls below.
+
 - **Entry-point profile:** Direct input has one entry point (user messages).
   Full Klarna adds retrieved knowledge (RAG) and authenticated customer context,
   for three input entry points. Output APIs and human escalation are not counted.
@@ -108,7 +118,7 @@ saved runs are labeled as having no recorded generation settings. Controls are
 disabled while a run is active. Artifact generation still uses the selected
 supported scenario.
 
-Even a one-scenario coverage run filters multiple candidates with the model before
+In full candidate search, even a one-scenario coverage run filters multiple candidates with the model before
 generating and validating a scenario. Local model speed, queued requests, timeouts
 and retries can make this take several minutes. Watch **Current step** and
 **Latest warning** in Run activity; the output target is not the number of model

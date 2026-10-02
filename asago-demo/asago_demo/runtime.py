@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 STAGES = ("policy", "scenarios", "artifact", "evaluation")
 SCENARIO_DEFAULTS = {
+    "scenario_scope": "full",
     "scenario_profile": "direct",
     "generation_mode": "coverage",
     "max_scenarios_per_pattern": 1,
@@ -76,6 +77,10 @@ def scenario_options(config: dict) -> dict:
     cap = options["max_scenarios_per_pattern"]
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 10:
         raise ValueError("Variants per attack pattern must be a whole number from 1 to 10")
+    if options["scenario_scope"] not in {"full", "quick3"}:
+        raise ValueError("Choose the full search or the 3-scenario quick demo")
+    if options["scenario_scope"] != "full":
+        options.update(generation_mode="exhaustive", max_scenarios_per_pattern=1)
     return options
 
 

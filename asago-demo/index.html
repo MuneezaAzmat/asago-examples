@@ -127,6 +127,14 @@
             <span>Used by Run scenarios and Run demo</span>
           </div>
           <div class="scenario-options-fields">
+            <label for="scenario-scope">
+              <span>Demo size</span>
+              <select id="scenario-scope" aria-describedby="scope-help">
+                <option value="quick3">Quick demo · up to 3 scenarios</option>
+                <option value="full">Full candidate search</option>
+              </select>
+              <small id="scope-help"></small>
+            </label>
             <label for="scenario-profile"
               ><span id="profile-label">Entry-point profile</span>
               <select

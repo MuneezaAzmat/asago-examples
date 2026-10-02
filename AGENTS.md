@@ -65,6 +65,11 @@ Each start creates fresh `activity` metadata and a separate execution log. Retai
 `logs` as the latest 160 lines for notebook compatibility; archive earlier attempts
 in `activity_history`. A full demo shares one activity record across all stages.
 Keep completion, cancellation, failure and restart states consistent with activity.
+Quick demo scope uses a reduced threat input through the pipeline's public
+`threats_path` argument before seed expansion; it must never bypass qualification
+or validation. The quick preset uses T5 with exhaustive mode and
+one scenario per pattern. Check the installed pattern IDs so catalog changes fail
+explicitly instead of silently increasing the demo workload.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and
