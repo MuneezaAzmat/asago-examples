@@ -44,3 +44,18 @@ asago-examples/
    asago-new-tool-examples = { workspace = true }
    ```
 4. Add notebooks, scripts, and sample data inside the folder.
+
+## End-to-end demo
+
+`asago-demo/` is the `demo` optional install group. Its `asago_demo` package owns
+the localhost controller and four stage workers; static assets and notebooks live
+beside it. Reuse existing component input directories and installed libraries.
+Do not commit environments, dependency caches, credentials, notebook outputs, or
+run results. `./asago-demo/setup.sh` installs the locked workspace, fetches only
+the pinned policy report files, and prepares the separate Python 3.13 Garak
+environment. Keep PR dependency revisions explicit until the features are released.
+
+Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
+`.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and
+`node --test asago-demo/tests/ui.test.cjs`. Run Garak adapter checks with
+`PYTHONPATH=asago-demo asago-demo/.garak-venv/bin/python -m pytest asago-demo/tests/test_garak_integration.py -q`.

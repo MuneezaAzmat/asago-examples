@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en" class="pf-v6-theme-dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asago · Policy to model evaluation</title>
+    <link rel="stylesheet" href="/assets/patternfly.css" />
+    <link rel="stylesheet" href="/assets/branding.css" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/view-state.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body class="asago-report">
+    <header class="asago-header studio-header">
+      <div class="brand">
+        <img src="/assets/logo.svg" alt="Asago" class="asago-logo" /><span
+          class="asago-product"
+          >Pipeline demo</span
+        >
+      </div>
+      <nav aria-label="Demo utilities">
+        <button id="recording" class="quiet" aria-pressed="false">
+          Recording view
+        </button>
+        <button
+          id="theme"
+          class="quiet"
+          aria-label="Toggle light and dark appearance"
+        >
+          Light mode
+        </button>
+        <button id="settings-open" class="quiet">Connection settings</button>
+      </nav>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">POLICY-DRIVEN AGENTIC RED TEAMING</p>
+          <h1 class="asago-title">From policy to model evaluation.</h1>
+          <p class="lede">
+            Explore the evidence. Generate a test. See how the model responds.
+          </p>
+        </div>
+        <div class="launch">
+          <button id="run-all" class="primary">
+            Run demo <span aria-hidden="true">↗</span></button
+          ><button id="cancel" class="quiet danger" hidden>Stop run</button
+          ><small>Saved policy · live generation & evaluation</small>
+        </div>
+      </section>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section class="context-strip" aria-label="Demo context">
+        <span><small>POLICY</small><strong>FS-ISAC generative AI</strong></span>
+        <span><small>SYSTEM</small><strong>Klarna support agent</strong></span>
+        <span
+          ><small>MODEL</small
+          ><strong id="model-label">Connecting…</strong></span
+        >
+        <span class="history-control"
+          ><label for="history">RUN</label
+          ><select id="history">
+            <option value="">New demo</option>
+          </select></span
+        >
+      </section>
+      <nav class="pipeline" aria-label="Pipeline stages">
+        <button class="stage active" data-tab="policy" aria-selected="true">
+          <span class="step">01</span
+          ><span class="stage-copy"
+            ><strong>Policy Mapper</strong
+            ><small>Policy → grounded risk evidence</small></span
+          ><span class="stage-state" id="policy-status">Saved input</span>
+        </button>
+        <button class="stage" data-tab="scenarios" aria-selected="false">
+          <span class="step">02</span
+          ><span class="stage-copy"
+            ><strong>Scenario Generator</strong
+            ><small>Risk evidence → adversarial scenarios</small></span
+          ><span class="stage-state" id="scenarios-status"
+            >Ready after policy</span
+          >
+        </button>
+        <button class="stage" data-tab="artifact" aria-selected="false">
+          <span class="step">03</span
+          ><span class="stage-copy"
+            ><strong>Artifact Generator</strong
+            ><small>Selected scenario → Garak artifact</small></span
+          ><span class="stage-state" id="artifact-status"
+            >Ready after scenarios</span
+          >
+        </button>
+        <button class="stage" data-tab="evaluation" aria-selected="false">
+          <span class="step">04</span
+          ><span class="stage-copy"
+            ><strong>Garak Evaluation</strong
+            ><small>Artifact → real target response & verdict</small></span
+          ><span class="stage-state" id="evaluation-status"
+            >Ready after artifact</span
+          >
+        </button>
+      </nav>
+      <section class="result-shell">
+        <header class="result-heading">
+          <div>
+            <p class="eyebrow" id="panel-kicker">01 / POLICY MAPPER</p>
+            <h2 id="panel-title">Policy findings</h2>
+            <p id="panel-description">
+              Explore the saved extraction using the interactive report from PR
+              #79.
+            </p>
+          </div>
+          <div class="result-actions">
+            <span id="elapsed" class="mono"></span
+            ><button id="run-stage" class="secondary">Load saved policy</button>
+          </div>
+        </header>
+        <div id="results"></div>
+      </section>
+      <details id="logs" class="technical">
+        <summary>
+          Run activity <span id="log-state">No active generation</span>
+        </summary>
+        <pre id="console" aria-live="off">
+Logs will appear here when a stage starts.</pre
+        >
+      </details>
+      <footer>
+        <span>Asago · Policy → scenario → artifact → evaluation</span
+        ><span
+          >Policy report:
+          <a
+            href="https://github.com/asago-ai/asago-policy-mapper/pull/79"
+            target="_blank"
+            rel="noreferrer"
+            >PR #79</a
+          >
+          · Garak:
+          <a
+            href="https://github.com/trustyai-explainability/garak/pull/11"
+            target="_blank"
+            rel="noreferrer"
+            >PR #11</a
+          ></span
+        >
+      </footer>
+    </main>
+    <dialog id="settings-dialog">
+      <form id="settings-form">
+        <div class="dialog-title">
+          <div>
+            <p class="eyebrow">LOCAL CONFIGURATION</p>
+            <h2>Model connection</h2>
+          </div>
+          <button
+            type="button"
+            id="settings-close"
+            class="quiet"
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
+        <p>
+          Used for live scenario and artifact generation. Policy results come
+          from the saved FS-ISAC extraction.
+        </p>
+        <label
+          >API base URL<input
+            id="base-url"
+            type="url"
+            required
+            placeholder="https://your-endpoint/v1"
+        /></label>
+        <div class="field-row">
+          <label
+            >Scenario model<input id="model" required list="models" /></label
+          ><label
+            >Artifact model<input
+              id="artifact-model"
+              placeholder="Same as scenario model"
+              list="models"
+          /></label>
+        </div>
+        <datalist id="models"></datalist>
+        <label
+          >API key<input
+            id="api-key"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Leave blank to keep the configured key"
+        /></label>
+        <small id="key-state"></small>
+        <hr />
+        <h3>Garak target · Ollama</h3>
+        <p>
+          The generated conversation is replayed to this model. The generation
+          endpoint above supplies the judge.
+        </p>
+        <label
+          >Ollama API base URL<input
+            id="target-base-url"
+            type="url"
+            required
+            placeholder="http://127.0.0.1:11434/v1"
+        /></label>
+        <label
+          >Target model<input id="target-model" required list="target-models"
+        /></label>
+        <datalist id="target-models"></datalist>
+        <button type="button" id="target-check" class="secondary">
+          Check Ollama
+        </button>
+        <p id="connection-state" role="status"></p>
+        <div class="dialog-actions">
+          <button type="button" id="connection-check" class="secondary">
+            Check connection</button
+          ><button type="submit" class="primary">Save settings</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

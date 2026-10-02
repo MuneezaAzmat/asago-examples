@@ -6,6 +6,7 @@ Example notebooks and datasets for [Asago](https://github.com/asago-ai) projects
 
 | Folder | Description | Install group |
 |--------|-------------|---------------|
+| [`asago-demo/`](./asago-demo/) | Four-stage dashboard and notebooks: policy → scenarios → artifacts → Garak evaluation | `demo` |
 | [`asago-policy-mapper/`](./asago-policy-mapper/) | Risk extraction from policy documents | `policy-mapper` |
 | [`asago-artifact-generator/`](./asago-artifact-generator/) | Garak probe artifacts from scenario YAMLs | `artifact-generator` |
 | [`asago-scenario-generator/`](./asago-scenario-generator/) | Adversarial scenario generation (taxonomy/risk and STPA) | `scenario-generator` |
@@ -28,3 +29,12 @@ jupyter notebook asago-policy-mapper/risk-extraction-demo.ipynb
 jupyter notebook asago-scenario-generator/taxonomy-risk-demo.ipynb   # taxonomy/risk pipeline
 jupyter notebook asago-scenario-generator/stpa-demo.ipynb            # STPA pipeline
 ```
+
+## Recordable end-to-end demo
+
+Run `./asago-demo/setup.sh`, configure `asago-demo/.env`, and start
+`./asago-demo/launch.sh`. Open **http://127.0.0.1:8765** for the interactive
+four-stage dashboard. It reuses the saved FS-ISAC extraction and Klarna inputs,
+generates scenarios and artifacts, then runs the artifact against Qwen on local
+Ollama using Garak. See the [demo guide](./asago-demo/README.md) for notebooks,
+endpoint settings, dependency pins, checks, and a recording outline.
