@@ -61,6 +61,10 @@ separate from the dashboard's next-run settings.
 all workers and Garak clients must use it. Model discovery previews draft
 connections without saving them. Never forward the LiteLLM key to Ollama, and
 record only public connection details in stage state.
+Each start creates fresh `activity` metadata and a separate execution log. Retain
+`logs` as the latest 160 lines for notebook compatibility; archive earlier attempts
+in `activity_history`. A full demo shares one activity record across all stages.
+Keep completion, cancellation, failure and restart states consistent with activity.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

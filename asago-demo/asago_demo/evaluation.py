@@ -247,13 +247,16 @@ def evaluation(run: Path, config: dict) -> dict:
 
     def logged_generate(*args, **kwargs):
         print(
-            f"Garak is replaying {len(entry['messages'])} turns to {target_connection['model']} "
+            f"[Stage Target] Garak is replaying {len(entry['messages'])} turns "
+            f"to {target_connection['model']} "
             f"on {target_connection['provider']}.",
             flush=True,
         )
         outputs = original_generate(*args, **kwargs)
         print(
-            "Target response received. Garak InjectionJudge is evaluating the rubric.", flush=True
+            "[Stage Judge] Target response received. "
+            "Garak InjectionJudge is evaluating the rubric.",
+            flush=True,
         )
         return outputs
 

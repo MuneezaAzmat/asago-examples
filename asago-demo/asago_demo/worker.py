@@ -56,7 +56,7 @@ def policy(run: Path, config: dict) -> dict:
     folder.mkdir(exist_ok=True)
     source = INPUTS / "risk-extractions/risk-extraction-fs-isac.json"
     extraction = folder / "risk-extraction.json"
-    print("Loading saved FS-ISAC policy extraction. No policy model calls.", flush=True)
+    print("[Stage Policy] Loading saved FS-ISAC extraction. No policy model calls.", flush=True)
     shutil.copyfile(source, extraction)
     shutil.copyfile(
         EXAMPLES / "asago-policy-mapper/policy_examples/fs-isac.pdf", folder / "policy.pdf"
@@ -64,7 +64,7 @@ def policy(run: Path, config: dict) -> dict:
     data = json.loads(extraction.read_text())
     report = build_policy_report(data, folder / "report.html")
     risks = data.get("risks", [])
-    print(f"PR #79 report ready: {len(risks)} matched taxonomy entries.", flush=True)
+    print(f"[Stage Policy report] Ready: {len(risks)} matched taxonomy entries.", flush=True)
     return {
         "status": "completed",
         "source": "saved",
@@ -202,7 +202,9 @@ def artifact(run: Path, config: dict) -> dict:
         api_key=connection["api_key"],
         model=model,
     )
-    print(f"Generating Garak artifact for {ctx.scenario_id} with {model}.", flush=True)
+    print(
+        f"[Stage Artifact] Generating and validating {ctx.scenario_id} with {model}.", flush=True
+    )
     result = generate_artifact(ctx, output_dir=run / "artifacts", force=False, max_attempts=3)
     validation_file = validation_path(ctx.scenario_id, run / "artifacts")
     validation = json.loads(validation_file.read_text()) if validation_file.exists() else {}

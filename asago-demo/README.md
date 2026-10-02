@@ -74,7 +74,14 @@ support in Garak PR #11 uses the OpenAI-compatible chat path.
 
 **Run demo** runs all four stages, choosing the first admitted scenario supported
 by Garak. **Stop run** stops the active worker; duplicate jobs are rejected.
-**Run activity** shows actual pipeline logs. The run selector opens saved results.
+**Run activity** starts fresh each time you start a demo or individual stage; all
+four stages stay together during **Run demo**. Completion details remain visible
+until the next execution. The panel shows stage status, elapsed time, recorded
+models and generation options, the latest pipeline step/output, warnings and
+errors. Quiet periods show the time since the worker last printed output; they
+are not estimates of model completion. Download the full execution log or open
+**Earlier activity** for previous stage attempts. Older saved runs retain their
+original logs. The run selector opens saved results.
 Zero admitted scenarios, failed validation, and failed evaluations stay visible.
 
 ### Scenario generation options
@@ -100,6 +107,12 @@ their scenario-stage state, shown separately from the next-run controls. Older
 saved runs are labeled as having no recorded generation settings. Controls are
 disabled while a run is active. Artifact generation still uses the selected
 supported scenario.
+
+Even a one-scenario coverage run filters multiple candidates with the model before
+generating and validating a scenario. Local model speed, queued requests, timeouts
+and retries can make this take several minutes. Watch **Current step** and
+**Latest warning** in Run activity; the output target is not the number of model
+requests. Trim these waits when recording.
 
 The target receives replayed scenario context. Its proposed tool calls are
 captured without executing business tools. Artifact validation is separate from

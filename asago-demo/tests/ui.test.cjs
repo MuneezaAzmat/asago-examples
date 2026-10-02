@@ -4,7 +4,53 @@ const {
   chooseRunId,
   canRenderResult,
   resolveModel,
+  activityView,
 } = require("../view-state.js");
+
+test("activity uses the execution clock and scope when rerunning a saved stage", () => {
+  const run = {
+    started: 1,
+    status: "running",
+    activity: {
+      stage: "scenarios",
+      stages: ["scenarios"],
+      started: 100,
+      status: "running",
+      last_output_at: 120,
+    },
+    stages: {
+      policy: { status: "completed", started: 1 },
+      scenarios: { status: "running", started: 100 },
+    },
+  };
+  const view = activityView(run, 180);
+  assert.equal(view.elapsed, 80);
+  assert.equal(view.quiet, 60);
+  assert.deepEqual(view.stages, ["scenarios"]);
+  run.activity.status = "failed";
+  run.activity.ended = 150;
+  assert.equal(activityView(run, 999).elapsed, 50);
+  assert.equal(activityView(run, 999).quiet, null);
+});
+
+test("older saved runs still expose real pipeline steps and warnings", () => {
+  const view = activityView(
+    {
+      status: "running",
+      started: 1,
+      stages: { scenarios: { started: 100, status: "running" } },
+      logs: [
+        "[Stage 3.5] Filtering candidates",
+        "WARNING Request timed out — retrying",
+      ],
+    },
+    180,
+  );
+  assert.match(view.phase, /Filtering/);
+  assert.match(view.last_warning, /timed out/);
+  assert.equal(view.stage, "scenarios");
+  assert.equal(activityView(null), null);
+});
 
 test("an HTML response identifies a wrong demo server instead of a JSON syntax error", async () => {
   const { readAPIResponse } = require("../view-state.js");

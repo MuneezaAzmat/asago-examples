@@ -179,12 +179,20 @@
           <p id="run-generation-options" class="run-generation-options"></p>
         </form>
         <p id="stage-model-summary" class="stage-model-summary"></p>
+        <p
+          id="live-activity"
+          class="stage-model-summary"
+          role="status"
+          hidden
+        ></p>
         <div id="results"></div>
       </section>
       <details id="logs" class="technical">
         <summary>
           Run activity <span id="log-state">No active generation</span>
         </summary>
+        <div id="activity-details" class="activity-details" hidden></div>
+        <div id="activity-downloads" class="activity-downloads"></div>
         <pre id="console" aria-live="off">
 Logs will appear here when a stage starts.</pre
         >

@@ -254,6 +254,12 @@ class Coordinator:
             state = json.loads(path.read_text())
             if state.get("status") == "running":
                 state["status"] = "interrupted"
+                if state.get("activity"):
+                    state["activity"].update(
+                        status="interrupted",
+                        ended=time.time(),
+                        error="Server stopped during this execution",
+                    )
                 for stage in state["stages"].values():
                     if stage["status"] == "running":
                         stage.update(
@@ -280,6 +286,52 @@ class Coordinator:
 
     def _save(self):
         atomic_json(self.runs / self.active_id / "state.json", self.state)
+
+    def _begin_activity(self, stage: str, folder: Path):
+        """One log per button/notebook execution; keep all stages of Run demo together."""
+        archive = self.state.setdefault("activity_history", [])
+        (folder / "activity").mkdir(exist_ok=True)
+        if previous := self.state.get("activity"):
+            archive.append(previous)
+        elif (folder / "console.log").exists():
+            # Preserve logs from demos recorded before execution history was added.
+            legacy = f"activity/legacy-{uuid.uuid4().hex[:8]}.log"
+            (folder / "console.log").replace(folder / legacy)
+            archive.append({"stage": "legacy", "log_file": legacy})
+        execution_id = uuid.uuid4().hex[:12]
+        self.state["activity"] = {
+            "id": execution_id,
+            "stage": stage,
+            "stages": list(STAGES) if stage == "all" else [stage],
+            "started": time.time(),
+            "status": "running",
+            "log_file": f"activity/{execution_id}.log",
+            "warning_count": 0,
+        }
+        self.state["logs"] = []
+        self.state.pop("error", None)
+        (folder / "console.log").write_text("")
+
+    def _activity_log(self, message: str, config: dict, *, output=False):
+        with self.lock:
+            activity = self.state["activity"]
+            clean = re.sub(r"\x1b\[[0-9;]*m", "", self.redact(message.rstrip(), config))
+            now = time.time()
+            stamp = datetime.fromtimestamp(now, UTC).strftime("%H:%M:%S UTC")
+            line = f"[{stamp}] [{self.active_stage}] {clean}"
+            if output and clean:
+                activity.update(last_output_at=now, last_message=clean)
+                if match := re.search(r"\[Stage [^\]]+\].*", clean):
+                    activity["phase"] = match.group()
+                if re.search(r"\b(WARNING|ERROR)\b|timed out|retrying", clean):
+                    activity["warning_count"] += 1
+                    activity["last_warning"] = clean
+            folder = self.runs / self.active_id
+            for name in ("console.log", activity["log_file"]):
+                with (folder / name).open("a") as handle:
+                    handle.write(line + "\n")
+            self.state["logs"] = (self.state["logs"] + [line])[-160:]
+            self._save()
 
     def current(self, run_id: str | None = None) -> dict | None:
         with self.lock:
@@ -356,7 +408,8 @@ class Coordinator:
             self.active_id = run_id
             self.active_stage = stage
             self.stop.clear()
-            self._save()
+            self._begin_activity(stage, folder)
+            self._activity_log("Execution started", config)
             stages = STAGES if stage == "all" else (stage,)
             self.thread = threading.Thread(
                 target=self._run, args=(stages, folder, config), daemon=True
@@ -371,7 +424,13 @@ class Coordinator:
                     break
                 with self.lock:
                     self.active_stage = stage
+                    self.state["activity"].update(current_stage=stage, phase="Starting stage")
                     self.state["stages"][stage] = {"status": "running", "started": time.time()}
+                    if stage in {"scenarios", "evaluation"}:
+                        self.state["stages"][stage]["timeout"] = config.get("timeout", 300)
+                        self.state["stages"][stage]["timeout_scope"] = (
+                            "request" if stage == "scenarios" else "evaluation"
+                        )
                     if stage == "scenarios":
                         self.state["stages"][stage]["generation_options"] = scenario_options(
                             config
@@ -389,7 +448,25 @@ class Coordinator:
                         }
                         for role in roles
                     }
-                    self._save()
+                    self._activity_log("Stage started", config)
+                    for role, model in self.state["stages"][stage]["models"].items():
+                        self._activity_log(
+                            f"Model ({role}): {model['provider']} · {model['model']}", config
+                        )
+                    if stage == "scenarios":
+                        self._activity_log(
+                            "Generation options: " + json.dumps(scenario_options(config)), config
+                        )
+                    if stage in {"scenarios", "evaluation"}:
+                        self._activity_log(
+                            f"Timeout: {config.get('timeout', 300)}s "
+                            + (
+                                "per request; retries may add time."
+                                if stage == "scenarios"
+                                else "for the complete target + judge evaluation."
+                            ),
+                            config,
+                        )
                 env = {**os.environ, "ASAGO_DEMO_CONFIG": json.dumps(config)}
                 with self.lock:
                     if self.stop.is_set():
@@ -404,14 +481,8 @@ class Coordinator:
                         cwd=self.root.parent,
                         start_new_session=True,
                     )
-                with (folder / "console.log").open("a") as log:
-                    for line in self.process.stdout:
-                        clean = re.sub(r"\x1b\[[0-9;]*m", "", self.redact(line.rstrip(), config))
-                        log.write(clean + "\n")
-                        log.flush()
-                        with self.lock:
-                            self.state["logs"] = (self.state["logs"] + [clean])[-160:]
-                            self._save()
+                for line in self.process.stdout:
+                    self._activity_log(line, config, output=True)
                 returncode = self.process.wait()
                 with self.lock:
                     self.process = None
@@ -432,18 +503,23 @@ class Coordinator:
                             or "The stage stopped without a valid result. See the run log.",
                         )
                         self.state["status"] = "failed"
-                        self._save()
+                        self.state["activity"]["error"] = info["error"]
+                        self._activity_log("Stage failed: " + info["error"], config)
                         return
                     info["status"] = "completed"
-                    self._save()
+                    self._activity_log(
+                        f"Stage completed in {info['ended'] - info['started']:.1f}s", config
+                    )
         except Exception as exc:
             with self.lock:
                 self.state["status"] = "failed"
                 error = self.redact(str(exc), config)
                 self.state["error"] = error
+                self.state["activity"]["error"] = error
                 for info in self.state["stages"].values():
                     if info["status"] == "running":
                         info.update(status="failed", error=error, ended=time.time())
+                self._activity_log("Stage failed: " + error, config)
         finally:
             with self.lock:
                 if self.stop.is_set():
@@ -453,7 +529,8 @@ class Coordinator:
                             info.update(status="cancelled", ended=time.time())
                 elif self.state["status"] == "running":
                     self.state["status"] = "completed"
-                self._save()
+                self.state["activity"].update(status=self.state["status"], ended=time.time())
+                self._activity_log("Execution " + self.state["status"], config)
 
     def cancel(self, run_id=None, stage=None):
         with self.lock:

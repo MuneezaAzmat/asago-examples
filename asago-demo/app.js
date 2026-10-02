@@ -18,7 +18,9 @@ let scenarioSearch = "",
   surfaceFilter = "";
 let observedActiveId = null;
 let scenarioOptionsDirty = false;
-const { chooseRunId, canRenderResult, resolveModel } = window.AsagoViewState;
+const { chooseRunId, canRenderResult, resolveModel, activityView } =
+  window.AsagoViewState;
+let observedActivity = "";
 const names = {
   policy: "Policy Mapper",
   scenarios: "Scenario Generator",
@@ -202,6 +204,96 @@ function formatTime(seconds) {
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 }
 
+function activityMessage(line) {
+  return String(line || "").replace(
+    /^\d{4}-\d{2}-\d{2}T\S+\s+\w+\s+\[[^\]]+\]\s*/,
+    "",
+  );
+}
+function renderActivity() {
+  const run = snapshot?.run,
+    activity = activityView(run);
+  $("#activity-details").hidden = !activity;
+  $("#live-activity").hidden = true;
+  $("#log-state").textContent = activity
+    ? `${activity.status} · ${formatTime(activity.elapsed)}`
+    : "No active run";
+  const consoleView = $("#console");
+  const follow =
+    consoleView.scrollHeight -
+      consoleView.scrollTop -
+      consoleView.clientHeight <
+    40;
+  const nextActivity = run
+    ? `${run.id}/${activity.id || activity.started}`
+    : "";
+  const changed = nextActivity !== observedActivity;
+  observedActivity = nextActivity;
+  const logText =
+    run?.logs?.join("\n") || "Logs will appear here when a stage starts.";
+  if (consoleView.textContent !== logText) consoleView.textContent = logText;
+  if (changed || follow) consoleView.scrollTop = consoleView.scrollHeight;
+  if (!activity) {
+    $("#activity-downloads").innerHTML = "";
+    $("#activity-downloads").dataset.key = "";
+    return;
+  }
+  if (changed && activity.status === "running") $("#logs").open = true;
+  const phase = activityMessage(activity.phase) || "Waiting for stage output";
+  const latest = activityMessage(activity.last_message);
+  const warning = activityMessage(activity.last_warning);
+  const currentStage = activity.current_stage || activity.stage;
+  if (activity.status === "running" && currentStage === activeTab) {
+    $("#live-activity").hidden = false;
+    $("#live-activity").textContent =
+      `Current step: ${phase}${warning ? " · Latest warning: " + warning : ""}`;
+  }
+  const stageRows = (activity.stages || [])
+    .map((stage) => {
+      const info = run.stages?.[stage] || {};
+      const models = Object.entries(info.models || {})
+        .map(
+          ([role, model]) =>
+            `${role}: ${serviceName(model.provider)} · ${model.model}`,
+        )
+        .join(" / ");
+      const options = info.generation_options;
+      const detail = [
+        stage === "policy" ? "Saved extraction · no model call" : models,
+        options
+          ? `${options.scenario_profile === "direct" ? "Direct input · 1 entry point" : "Full Klarna · 3 entry points"} / ${options.generation_mode} / per-pattern limit ${options.max_scenarios_per_pattern}`
+          : "",
+        stage !== "policy" && info.timeout
+          ? info.timeout_scope === "evaluation"
+            ? `${info.timeout}s deadline for the complete target + judge evaluation`
+            : `${info.timeout}s timeout per model request; retries may add time`
+          : "",
+        info.error,
+      ]
+        .filter(Boolean)
+        .map(escapeHTML)
+        .join("<br>");
+      return `<li><div><strong>${escapeHTML(names[stage])}</strong><span>${escapeHTML(info.status || "pending")}${info.started ? " · " + formatTime((info.ended || Date.now() / 1000) - info.started) : ""}</span></div><p>${detail}</p></li>`;
+    })
+    .join("");
+  $("#activity-details").innerHTML = `
+    <div class="activity-heading"><strong>${escapeHTML(activity.stage === "all" ? "Full demo" : names[activity.stage] || "Saved activity")}</strong><span>Started ${escapeHTML(new Date(activity.started * 1000).toLocaleTimeString())} · ${formatTime(activity.elapsed)} elapsed</span></div>
+    <p class="activity-note">Activity resets when you start the next demo or stage. Earlier logs stay saved.</p>
+    <ul class="activity-stages">${stageRows}</ul>
+    <div class="activity-progress"><strong>${activity.status === "running" ? "Current step" : "Last pipeline step"}</strong><p>${escapeHTML(phase)}</p>
+    ${latest ? `<strong>Latest output${activity.last_output_at ? " · " + escapeHTML(new Date(activity.last_output_at * 1000).toLocaleTimeString()) : ""}</strong><p>${escapeHTML(latest)}</p>` : ""}
+    ${activity.quiet >= 15 ? `<p class="activity-note">Worker still running; no new output for ${formatTime(activity.quiet)}. A model request may still be in progress.</p>` : ""}
+    ${warning ? `<div class="activity-warning"><strong>Latest warning${activity.warning_count ? " · " + activity.warning_count + " warnings/errors recorded" : ""}</strong><p>${escapeHTML(warning)}</p></div>` : ""}
+    ${activity.error ? `<div class="activity-warning"><strong>Execution error</strong><p>${escapeHTML(activity.error)}</p></div>` : ""}</div>`;
+  const history = (run.activity_history || []).slice().reverse();
+  const links = `<span>Showing the latest 160 log lines.</span>${download(activity.log_file, "Full execution log ↗")}${history.length ? `<details><summary>Earlier activity (${history.length})</summary>${history.map((item) => download(item.log_file, `${names[item.stage] || (item.stage === "all" ? "Full demo" : "Earlier activity")} · ${item.started ? new Date(item.started * 1000).toLocaleString() : "legacy log"} · ${item.status || "saved"}`)).join("")}</details>` : ""}`;
+  // Keep an expanded history list open across polling updates.
+  if ($("#activity-downloads").dataset.key !== nextActivity + history.length) {
+    $("#activity-downloads").innerHTML = links;
+    $("#activity-downloads").dataset.key = nextActivity + history.length;
+  }
+}
+
 function renderPolicy(data) {
   return `<div class="report-toolbar"><div><span class="badge saved">Saved extraction</span><span>${data.count} matched entries · no live policy calls</span></div><div>${download(data.extraction, "Extraction JSON")}${download(data.report, "Open full report ↗")}</div></div><iframe class="policy-report" title="Interactive FS-ISAC policy report from PR 79" src="${escapeHTML(fileURL(data.report))}" sandbox="allow-scripts allow-downloads"></iframe>`;
 }
@@ -291,6 +383,7 @@ function renderEvaluation(data) {
 }
 function render() {
   controls();
+  renderActivity();
   const run = snapshot?.run,
     info = run?.stages?.[activeTab],
     data = run?.results?.[activeTab];
@@ -399,15 +492,6 @@ async function poll() {
     if ($("#history").innerHTML !== historyHTML)
       $("#history").innerHTML = historyHTML;
     $("#history").value = selectedRun;
-    $("#console").textContent =
-      (data.run?.logs || []).join("\n") ||
-      "Logs will appear here when a stage starts.";
-    $("#log-state").textContent = data.busy
-      ? "Run in progress"
-      : data.run
-        ? "Saved activity"
-        : "No active run";
-    if (data.busy) $("#console").scrollTop = $("#console").scrollHeight;
     render();
   } catch (error) {
     notice("Cannot reach the local demo server. " + error.message);

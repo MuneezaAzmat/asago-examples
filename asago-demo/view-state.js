@@ -42,11 +42,40 @@
     }
     return response.json();
   }
+  function activityView(run, now = Date.now() / 1000) {
+    if (!run) return null;
+    const latest = Object.entries(run.stages || {})
+      .filter(([, info]) => info.started)
+      .sort((a, b) => b[1].started - a[1].started)[0];
+    const logs = run.logs || [];
+    const recent = [...logs].reverse();
+    const activity = run.activity || {
+      stage: latest?.[0],
+      stages: latest ? [latest[0]] : [],
+      started: latest?.[1].started || run.started,
+      ended: latest?.[1].ended,
+      status: run.status,
+      phase: recent.find((line) => /\[Stage [^\]]+\]/.test(line)),
+      last_message: logs.at(-1),
+      last_warning: recent.find((line) => /WARNING|ERROR|timed out/.test(line)),
+      error: latest?.[1].error || run.error,
+      log_file: "console.log",
+    };
+    return {
+      ...activity,
+      elapsed: Math.max(0, (activity.ended || now) - activity.started),
+      quiet:
+        activity.status === "running" && activity.last_output_at
+          ? Math.max(0, now - activity.last_output_at)
+          : null,
+    };
+  }
   const exports = {
     chooseRunId,
     canRenderResult,
     resolveModel,
     readAPIResponse,
+    activityView,
   };
   if (typeof module !== "undefined") module.exports = exports;
   else root.AsagoViewState = exports;

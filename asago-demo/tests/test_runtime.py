@@ -247,6 +247,95 @@ print('hide-me')
     assert all(s["status"] == "completed" for s in state["stages"].values())
     assert "hide-me" not in json.dumps(state)
     assert "hide-me" not in (Path(state["_path"]) / "console.log").read_text()
+    assert state["activity"]["status"] == "completed"
+    assert state["activity"]["ended"] >= state["activity"]["started"]
+    assert state["activity"]["stages"] == ["policy", "scenarios", "artifact", "evaluation"]
+    for stage in state["activity"]["stages"]:
+        assert any(f"[{stage}] Stage completed" in line for line in state["logs"])
+
+
+def test_rerun_resets_activity_and_keeps_previous_logs(tmp_path, monkeypatch):
+    code = """
+import json,sys
+from pathlib import Path
+stage,root = sys.argv[1],Path(sys.argv[2])
+print('OUTPUT-' + stage)
+(root/(stage+'.json')).write_text(json.dumps({'status':'completed'}))
+"""
+    c = make_coordinator(tmp_path, monkeypatch, code)
+    c.start("all")
+    previous = wait_for_finish(c)
+    folder = Path(previous["_path"])
+    previous_log = (folder / previous["activity"]["log_file"]).read_text()
+    c.start("scenarios")
+    current = wait_for_finish(c)
+    assert "OUTPUT-policy" not in "\n".join(current["logs"])
+    assert "OUTPUT-scenarios" in "\n".join(current["logs"])
+    assert "OUTPUT-evaluation" not in (folder / "console.log").read_text()
+    assert (folder / previous["activity"]["log_file"]).read_text() == previous_log
+    assert current["activity_history"][-1]["id"] == previous["activity"]["id"]
+    assert current["activity"]["id"] != previous["activity"]["id"]
+    assert current["activity"]["stages"] == ["scenarios"]
+
+
+def test_activity_exposes_pipeline_step_and_timeouts_without_secrets(tmp_path, monkeypatch):
+    code = """
+import json,sys
+from pathlib import Path
+print('[Stage 3.5] Expanding and filtering candidates...')
+print('WARNING Filter request timed out hide-me — retrying')
+(Path(sys.argv[2])/(sys.argv[1]+'.json')).write_text(
+    json.dumps({'status':'failed','error':'Endpoint timed out hide-me'}))
+"""
+    c = make_coordinator(tmp_path, monkeypatch, code)
+    c.start("policy")
+    state = wait_for_finish(c)
+    activity = state["activity"]
+    assert "filtering candidates" in activity["phase"]
+    assert "retrying" in activity["last_warning"]
+    assert activity["warning_count"] == 1
+    assert activity["last_output_at"] >= activity["started"]
+    assert activity["status"] == "failed"
+    assert "timed out" in activity["error"]
+    assert "hide-me" not in json.dumps(state)
+    assert any("Stage failed" in line for line in state["logs"])
+
+
+def test_restart_finishes_interrupted_activity(tmp_path, monkeypatch):
+    c = make_coordinator(tmp_path, monkeypatch, "import time; time.sleep(30)")
+    c.start("policy")
+    c.cancel()
+    state = wait_for_finish(c)
+    assert state["activity"]["status"] == "cancelled"
+    assert state["activity"]["ended"] >= state["activity"]["started"]
+    state["status"] = state["activity"]["status"] = "running"
+    (Path(state["_path"]) / "state.json").write_text(json.dumps(state))
+    restored = Coordinator(tmp_path, c.settings).current()
+    assert restored["activity"]["status"] == "interrupted"
+    assert "Server stopped" in restored["activity"]["error"]
+
+
+def test_legacy_log_is_archived_before_first_rerun(tmp_path, monkeypatch):
+    code = """
+import json,sys
+from pathlib import Path
+(Path(sys.argv[2])/(sys.argv[1]+'.json')).write_text(json.dumps({'status':'completed'}))
+"""
+    c = make_coordinator(tmp_path, monkeypatch, code)
+    c.start("all")
+    state = wait_for_finish(c)
+    state.pop("activity")
+    state["error"] = "old failure"
+    folder = Path(state["_path"])
+    (folder / "state.json").write_text(json.dumps(state))
+    (folder / "console.log").write_text("Legacy activity\n")
+    c.start("scenarios")
+    current = wait_for_finish(c)
+    assert "error" not in current
+    assert (
+        folder / current["activity_history"][-1]["log_file"]
+    ).read_text() == "Legacy activity\n"
+    assert "Legacy activity" not in (folder / "console.log").read_text()
 
 
 def test_failure_stops_dependent_stages(tmp_path, monkeypatch):
