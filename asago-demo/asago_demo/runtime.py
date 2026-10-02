@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGES = ("policy", "scenarios", "artifact", "evaluation")
+SECRET_FIELDS = {"api_key", "google_api_key"}
+GOOGLE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 SCENARIO_DEFAULTS = {
     "scenario_scope": "full",
     "scenario_profile": "direct",
@@ -49,8 +51,13 @@ def provider_connection(config: dict, provider: str) -> dict:
         if not urlparse(url).path.strip("/"):
             url = url.rstrip("/") + "/v1"
         key = "ollama"
+    elif provider == "google":
+        url = GOOGLE_BASE_URL
+        key = config.get("google_api_key", "")
+        if not key:
+            raise ValueError("Add your Google Gemini API key in Models & connections")
     else:
-        raise ValueError("Choose LiteLLM or Ollama")
+        raise ValueError("Choose LiteLLM, Ollama or Google Gemini")
     return {"provider": provider, "base_url": url.rstrip("/"), "api_key": key}
 
 
@@ -62,9 +69,14 @@ def model_connection(config: dict, role: str) -> dict:
     model = config.get(
         model_key, {"scenario": "gemma-4-26b", "target": "qwen2.5:14b"}.get(role, "")
     )
+    if provider == "google":
+        model = model.removeprefix("models/")
     if provider == "same" and role in {"artifact", "judge"}:
         parent = model_connection(config, "scenario" if role == "artifact" else "artifact")
-        return {**parent, "model": model or parent["model"]}
+        resolved_model = model or parent["model"]
+        if parent["provider"] == "google":
+            resolved_model = resolved_model.removeprefix("models/")
+        return {**parent, "model": resolved_model}
     return {**provider_connection(config, provider), "model": model}
 
 
@@ -91,9 +103,10 @@ def redact_value(value, config):
         return [redact_value(v, config) for v in value]
     if not isinstance(value, str):
         return value
-    key = config.get("api_key", "")
-    if key and key != "none":
-        value = value.replace(key, "[redacted]")
+    for field in SECRET_FIELDS:
+        key = config.get(field, "")
+        if key and key != "none":
+            value = value.replace(key, "[redacted]")
     return re.sub(r"(?i)(Bearer\s+)[^\s\"'\\]+", r"\1[redacted]", value)
 
 
@@ -132,6 +145,7 @@ class Settings:
         "base_url",
         "model",
         "api_key",
+        "google_api_key",
         "artifact_model",
         "timeout",
         "target_base_url",
@@ -156,6 +170,7 @@ class Settings:
                 or env.get("OPENAI_BASE_URL", ""),
                 "api_key": env.get("ASAGO_SCENARIO_GENERATOR_API_KEY")
                 or env.get("OPENAI_API_KEY", "none"),
+                "google_api_key": env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY", ""),
                 "model": env.get("ASAGO_SCENARIO_GENERATOR_MODEL_NAME", "gemma-4-26b"),
                 "artifact_model": env.get("REDTEAM_MODEL", ""),
                 "timeout": 300,
@@ -171,8 +186,9 @@ class Settings:
     def public(self) -> dict:
         data = self.private()
         return {
-            **{k: v for k, v in data.items() if k != "api_key"},
+            **{k: v for k, v in data.items() if k not in SECRET_FIELDS},
             "api_key_configured": bool(data.get("api_key")),
+            "google_api_key_configured": bool(data.get("google_api_key")),
         }
 
     def preview(self, changes: dict) -> dict:
@@ -188,16 +204,16 @@ class Settings:
                 scenario_options({**values, key: value})
             elif not isinstance(value, str) or len(value) > 4096:
                 raise ValueError("Configuration fields must be text")
-            if key == "api_key" and not value:
+            if key in SECRET_FIELDS and not value:
                 continue
             values[key] = value.strip() if isinstance(value, str) else value
         scenario_options(values)
         for role in ("scenario", "artifact", "target", "judge"):
             provider = values[f"{role}_provider"]
             allowed = (
-                ("litellm", "ollama", "same")
+                ("litellm", "ollama", "google", "same")
                 if role in {"artifact", "judge"}
-                else ("litellm", "ollama")
+                else ("litellm", "ollama", "google")
             )
             if provider not in allowed:
                 raise ValueError(f"Invalid service for {role}")

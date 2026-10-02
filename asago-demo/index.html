@@ -242,8 +242,8 @@ Logs will appear here when a stage starts.</pre
           </button>
         </div>
         <p>
-          Choose LiteLLM or Ollama for each step. Policy Mapper uses the saved
-          extraction.
+          Choose LiteLLM, Ollama or Google Gemini for each step. Policy Mapper
+          uses the saved extraction.
         </p>
         <div id="model-roles" class="model-roles"></div>
         <p class="model-help">
@@ -291,6 +291,25 @@ Logs will appear here when a stage starts.</pre
                 Load Ollama models
               </button>
               <p id="ollama-models-status" role="status"></p>
+            </section>
+            <section aria-labelledby="google-title">
+              <h3 id="google-title">Google Gemini</h3>
+              <label for="google-api-key">Google API key</label>
+              <input
+                id="google-api-key"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Leave blank to keep the configured key"
+              />
+              <small id="google-key-state"></small>
+              <p>
+                Use your Google AI Studio key. Connects directly to Google;
+                choose a Gemini Flash or other available chat model.
+              </p>
+              <button type="button" id="google-models-load" class="secondary">
+                Load Google models
+              </button>
+              <p id="google-models-status" role="status"></p>
             </section>
           </div>
         </details>

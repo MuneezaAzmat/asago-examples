@@ -12,7 +12,12 @@ from asago_demo.server import make_handler
 
 @pytest.fixture
 def server(tmp_path):
-    coordinator = Coordinator(tmp_path, Settings(tmp_path, defaults={"api_key": "secret-value"}))
+    coordinator = Coordinator(
+        tmp_path,
+        Settings(
+            tmp_path, defaults={"api_key": "secret-value", "google_api_key": "google-saved-secret"}
+        ),
+    )
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(coordinator))
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -26,6 +31,8 @@ def test_status_does_not_disclose_secrets(server):
     with urllib.request.urlopen(base + "/api/state") as response:
         data = response.read().decode()
     assert "secret-value" not in data
+    assert "google-saved-secret" not in data
+    assert json.loads(data)["settings"]["google_api_key_configured"]
     assert json.loads(data)["settings"]["api_key_configured"]
 
 
@@ -95,3 +102,69 @@ def test_model_discovery_uses_draft_service_without_saving(
         (url.rstrip("/") + ("/v1" if provider == "ollama" else "") + "/models", "Bearer " + key)
     ]
     assert not coordinator.settings.path.exists()
+
+
+def test_google_discovery_keeps_draft_key_private_and_uses_google_only(server, monkeypatch):
+    import httpx
+
+    base, coordinator = server
+    seen = []
+
+    def models(request):
+        seen.append((str(request.url), request.headers.get("Authorization")))
+        return httpx.Response(200, json={"data": [{"id": "models/gemini-flash-test"}]})
+
+    with httpx.Client(transport=httpx.MockTransport(models)) as client:
+        monkeypatch.setattr(httpx, "get", client.get)
+        request = urllib.request.Request(
+            base + "/api/models",
+            data=json.dumps({"provider": "google", "api_key": "google-draft-secret"}).encode(),
+            headers={"X-Asago-Demo": "1"},
+        )
+        with urllib.request.urlopen(request) as response:
+            assert json.load(response)["models"] == ["gemini-flash-test"]
+    assert seen == [
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai/models",
+            "Bearer google-draft-secret",
+        )
+    ]
+    assert not coordinator.settings.path.exists()
+
+
+def test_google_discovery_error_redacts_unsaved_key(server, monkeypatch):
+    import httpx
+
+    base, _ = server
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("Bad Google key: google-draft-secret")
+
+    monkeypatch.setattr(httpx, "get", broken)
+    request = urllib.request.Request(
+        base + "/api/models",
+        data=b'{"provider":"google","api_key":"google-draft-secret"}',
+        headers={"X-Asago-Demo": "1"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(request)
+    assert "google-draft-secret" not in error.value.read().decode()
+
+
+def test_google_discovery_cannot_redirect_key_to_custom_url(server, monkeypatch):
+    import httpx
+
+    base, _ = server
+
+    def unexpected_request(*args, **kwargs):
+        pytest.fail("Google credentials must never go to a custom URL")
+
+    monkeypatch.setattr(httpx, "get", unexpected_request)
+    request = urllib.request.Request(
+        base + "/api/models",
+        data=b'{"provider":"google","base_url":"https://unrelated.example/v1","api_key":"google-draft-secret"}',
+        headers={"X-Asago-Demo": "1"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(request)
+    assert "official API endpoint" in error.value.read().decode()

@@ -57,10 +57,14 @@ environment. Keep PR dependency revisions explicit until the features are releas
 Scenario options are validated by `asago_demo.runtime`, applied by the worker,
 and recorded in each scenario stage's `generation_options`. Keep saved-run labels
 separate from the dashboard's next-run settings.
-`model_connection` resolves each role's LiteLLM/Ollama service and credentials;
+`model_connection` resolves each role's LiteLLM/Ollama/Google service and credentials;
 all workers and Garak clients must use it. Model discovery previews draft
 connections without saving them. Never forward the LiteLLM key to Ollama, and
 record only public connection details in stage state.
+Google Gemini uses its fixed official compatibility endpoint and a separate
+`google_api_key` (GEMINI_API_KEY/GOOGLE_API_KEY). Include every secret field in
+public-state filtering, empty-key preservation and redaction. Never send the
+Google key to LiteLLM/Ollama or accept a custom Google discovery endpoint.
 Each start creates fresh `activity` metadata and a separate execution log. Retain
 `logs` as the latest 160 lines for notebook compatibility; archive earlier attempts
 in `activity_history`. A full demo shares one activity record across all stages.

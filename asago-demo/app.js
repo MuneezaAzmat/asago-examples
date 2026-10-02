@@ -60,8 +60,13 @@ async function api(route, data) {
   return result;
 }
 function notice(text) {
-  $("#notice").textContent = text;
+  $("#notice").textContent = displayMessage(text);
   $("#notice").hidden = !text;
+}
+function displayMessage(text) {
+  return String(text || "")
+    .replace(/\bquarantined\b/gi, "rejected")
+    .replace(/Inspect quarantine/g, "Inspect rejected scenarios");
 }
 function fileURL(path) {
   return (
@@ -200,7 +205,7 @@ function renderScenarioOptions(busy) {
       ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
       : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
   $("#limit-help").textContent = quick
-    ? "Fixed at one scenario per selected pattern to keep the demo small. Rejected scenarios stay in quarantine."
+    ? "Fixed at one scenario per selected pattern to keep the demo small. Rejected scenarios are kept for inspection."
     : coverage
       ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
       : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
@@ -231,7 +236,7 @@ function formatTime(seconds) {
 }
 
 function activityMessage(line) {
-  return String(line || "").replace(
+  return displayMessage(line).replace(
     /^\d{4}-\d{2}-\d{2}T\S+\s+\w+\s+\[[^\]]+\]\s*/,
     "",
   );
@@ -294,7 +299,7 @@ function renderActivity() {
             ? `${info.timeout}s deadline for the complete target + judge evaluation`
             : `${info.timeout}s timeout per model request; retries may add time`
           : "",
-        info.error,
+        displayMessage(info.error),
       ]
         .filter(Boolean)
         .map(escapeHTML)
@@ -310,7 +315,7 @@ function renderActivity() {
     ${latest ? `<strong>Latest output${activity.last_output_at ? " · " + escapeHTML(new Date(activity.last_output_at * 1000).toLocaleTimeString()) : ""}</strong><p>${escapeHTML(latest)}</p>` : ""}
     ${activity.quiet >= 15 ? `<p class="activity-note">Worker still running; no new output for ${formatTime(activity.quiet)}. A model request may still be in progress.</p>` : ""}
     ${warning ? `<div class="activity-warning"><strong>Latest warning${activity.warning_count ? " · " + activity.warning_count + " warnings/errors recorded" : ""}</strong><p>${escapeHTML(warning)}</p></div>` : ""}
-    ${activity.error ? `<div class="activity-warning"><strong>Execution error</strong><p>${escapeHTML(activity.error)}</p></div>` : ""}</div>`;
+    ${activity.error ? `<div class="activity-warning"><strong>Execution error</strong><p>${escapeHTML(displayMessage(activity.error))}</p></div>` : ""}</div>`;
   const history = (run.activity_history || []).slice().reverse();
   const links = `<span>Showing the latest 160 log lines.</span>${download(activity.log_file, "Full execution log ↗")}${history.length ? `<details><summary>Earlier activity (${history.length})</summary>${history.map((item) => download(item.log_file, `${names[item.stage] || (item.stage === "all" ? "Full demo" : "Earlier activity")} · ${item.started ? new Date(item.started * 1000).toLocaleString() : "legacy log"} · ${item.status || "saved"}`)).join("")}</details>` : ""}`;
   // Keep an expanded history list open across polling updates.
@@ -340,7 +345,7 @@ function renderScenarios(data) {
   if (!rows.some((s) => s.file === selectedScenario))
     selectedScenario =
       rows.find((s) => !s.skip_reason)?.file || rows[0]?.file || "";
-  return `<div class="results-inner"><div class="metrics">${metric(data.admitted ?? rows.length, "Admitted scenarios", true)}${metric(data.quarantined || 0, "Quarantined candidates")}${metric(rows.filter((s) => !s.skip_reason).length, "Scenarios writable in Garak", true)}</div><div class="charts">${chart("Injection surfaces · select to filter", distribution(rows, "surface"), true)}${chart(
+  return `<div class="results-inner"><div class="metrics">${metric(data.admitted ?? rows.length, "Admitted scenarios", true)}${metric(data.quarantined || 0, "Rejected scenarios")}${metric(rows.filter((s) => !s.skip_reason).length, "Scenarios writable in Garak", true)}</div><div class="charts">${chart("Injection surfaces · select to filter", distribution(rows, "surface"), true)}${chart(
     "Policy risk traceability",
     [
       ["Linked to a risk", rows.filter((s) => s.risk_id).length],
@@ -356,7 +361,7 @@ function renderScenarios(data) {
     )
     .join(
       "",
-    )}</select><small id="scenario-count"></small></div><div id="scenario-list"></div><div class="report-toolbar"><span>Select a scenario, then open Artifact Generator.</span><div>${download(data.report, "Full scenario report ↗")}${download(data.run_dir + "/finalization-inventory.json", "Admission inventory")}</div></div><details class="technical"><summary>Technical details & quarantine evidence</summary>${code({ inventory: data.inventory, quarantine: data.quarantine })}</details></div>`;
+    )}</select><small id="scenario-count"></small></div><div id="scenario-list"></div><div class="report-toolbar"><span>Select a scenario, then open Artifact Generator.</span><div>${download(data.report, "Full scenario report ↗")}${download(data.run_dir + "/finalization-inventory.json", "Admission inventory")}</div></div><details class="technical"><summary>Technical details & rejection evidence</summary>${code({ inventory: data.inventory, rejected_scenarios: data.quarantine })}</details></div>`;
 }
 function fillScenarioList() {
   const data = snapshot?.run?.results?.scenarios;
@@ -428,7 +433,7 @@ function render() {
     }[activeTab];
     $("#results").innerHTML =
       (data.status === "failed"
-        ? `<div class="notice">${escapeHTML(data.error)}</div>`
+        ? `<div class="notice">${escapeHTML(displayMessage(data.error))}</div>`
         : "") + renderer(data);
     if (activeTab === "scenarios") {
       fillScenarioList();
@@ -460,7 +465,7 @@ function render() {
   } else if (["failed", "cancelled", "interrupted"].includes(info?.status)) {
     $("#results").innerHTML = empty(
       `${names[activeTab]} ${info.status}`,
-      info.error || "You can run this stage again.",
+      displayMessage(info.error) || "You can run this stage again.",
     );
   } else {
     $("#results").innerHTML = empty(
@@ -613,12 +618,17 @@ let modelDraft = {},
   modelManual = {},
   discoveryVersion = 0;
 function serviceName(provider) {
-  return provider === "ollama" ? "Ollama" : "LiteLLM";
+  return (
+    { ollama: "Ollama", litellm: "LiteLLM", google: "Google Gemini" }[
+      provider
+    ] || provider
+  );
 }
 function modelKey(role) {
   return role === "scenario" ? "model" : `${role}_model`;
 }
 function discoverySignature(provider) {
+  if (provider === "google") return $("#google-api-key").value;
   return provider === "litellm"
     ? `${$("#base-url").value.trim()}|${$("#api-key").value}`
     : $("#ollama-base-url").value.trim();
@@ -662,6 +672,14 @@ function renderModelChoices() {
 async function loadProviderModels(provider) {
   const button = $(`#${provider}-models-load`),
     status = $(`#${provider}-models-status`);
+  if (
+    provider === "google" &&
+    !$("#google-api-key").value.trim() &&
+    !snapshot.settings.google_api_key_configured
+  ) {
+    status.textContent = "Enter your Google API key below, then load models.";
+    return;
+  }
   const version = discoveryVersion,
     signature = discoverySignature(provider);
   button.disabled = true;
@@ -669,9 +687,13 @@ async function loadProviderModels(provider) {
   try {
     const result = await api("/api/models", {
       provider,
-      base_url: $(
-        provider === "litellm" ? "#base-url" : "#ollama-base-url",
-      ).value.trim(),
+      ...(provider === "google"
+        ? { api_key: $("#google-api-key").value }
+        : {
+            base_url: $(
+              provider === "litellm" ? "#base-url" : "#ollama-base-url",
+            ).value.trim(),
+          }),
       ...(provider === "litellm" ? { api_key: $("#api-key").value } : {}),
     });
     if (
@@ -703,16 +725,20 @@ $("#settings-open").addEventListener("click", () => {
   modelManual = {};
   $("#base-url").value = s.base_url || "";
   $("#api-key").value = "";
+  $("#google-api-key").value = "";
   $("#ollama-base-url").value =
     s.ollama_base_url || s.target_base_url || "http://127.0.0.1:11434/v1";
   $("#key-state").textContent = s.api_key_configured
     ? "A key is configured locally."
     : "No API key configured.";
+  $("#google-key-state").textContent = s.google_api_key_configured
+    ? "A Google key is configured locally."
+    : "No Google key configured.";
   $("#connection-state").textContent = "";
   $("#model-roles").innerHTML = Object.entries(modelRoles)
     .map(
       ([role, label]) =>
-        `<div class="model-role"><h3>${label}</h3><div><label for="${role}-provider">${label} service</label><select id="${role}-provider">${["artifact", "judge"].includes(role) ? `<option value="same">Same service as ${role === "judge" ? "artifact" : "scenario"}</option>` : ""}<option value="litellm">LiteLLM</option><option value="ollama">Ollama</option></select></div><div><label for="${role}-model-choice">${label} model</label><select id="${role}-model-choice"></select><input id="${role}-model-custom" aria-label="${label} custom model" placeholder="Exact served model name" hidden /><small id="${role}-model-resolved"></small></div></div>`,
+        `<div class="model-role"><h3>${label}</h3><div><label for="${role}-provider">${label} service</label><select id="${role}-provider">${["artifact", "judge"].includes(role) ? `<option value="same">Same service as ${role === "judge" ? "artifact" : "scenario"}</option>` : ""}<option value="litellm">LiteLLM</option><option value="ollama">Ollama</option><option value="google">Google Gemini</option></select></div><div><label for="${role}-model-choice">${label} model</label><select id="${role}-model-choice"></select><input id="${role}-model-custom" aria-label="${label} custom model" placeholder="Exact served model name" hidden /><small id="${role}-model-resolved"></small></div></div>`,
     )
     .join("");
   for (const role of Object.keys(modelRoles)) {
@@ -744,9 +770,12 @@ $("#settings-open").addEventListener("click", () => {
   }
   renderModelChoices();
   $("#settings-dialog").showModal();
-  for (const provider of ["litellm", "ollama"]) {
+  for (const provider of ["litellm", "ollama", "google"]) {
     $(`#${provider}-models-load`).disabled = false;
-    if ($(provider === "litellm" ? "#base-url" : "#ollama-base-url").value)
+    if (
+      provider === "google" ||
+      $(provider === "litellm" ? "#base-url" : "#ollama-base-url").value
+    )
       loadProviderModels(provider);
     else
       $(`#${provider}-models-status`).textContent =
@@ -759,14 +788,24 @@ $("#settings-close").addEventListener("click", () =>
 $("#settings-dialog").addEventListener("close", () => {
   discoveryVersion++;
 });
-for (const provider of ["litellm", "ollama"]) {
+for (const provider of ["litellm", "ollama", "google"]) {
   $(`#${provider}-models-load`).addEventListener("click", () =>
     loadProviderModels(provider),
   );
 }
-for (const selector of ["#base-url", "#ollama-base-url", "#api-key"]) {
+for (const selector of [
+  "#base-url",
+  "#ollama-base-url",
+  "#api-key",
+  "#google-api-key",
+]) {
   $(selector).addEventListener("input", () => {
-    const provider = selector === "#ollama-base-url" ? "ollama" : "litellm";
+    const provider =
+      selector === "#google-api-key"
+        ? "google"
+        : selector === "#ollama-base-url"
+          ? "ollama"
+          : "litellm";
     $(`#${provider}-models-status`).textContent =
       "Connection changed. Reload models to refresh the list.";
     renderModelChoices();
@@ -787,6 +826,7 @@ $("#settings-form").addEventListener("submit", async (event) => {
       base_url: $("#base-url").value.trim(),
       ollama_base_url: $("#ollama-base-url").value.trim(),
       api_key: $("#api-key").value,
+      google_api_key: $("#google-api-key").value,
     });
     $("#settings-dialog").close();
     await poll();

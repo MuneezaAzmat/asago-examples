@@ -31,7 +31,7 @@ IPv4 and IPv6 listeners from different apps share the same port.
 
 Open **Models & connections** to choose a service and model separately for scenario
 generation, artifact generation, the Garak target, and the Garak judge. Each role
-can use **LiteLLM** or **Ollama** through its OpenAI-compatible API. Artifact
+can use **LiteLLM**, **Ollama**, or **Google Gemini**. Artifact
 generation initially inherits the scenario service/model, and the judge inherits
 the artifact service/model; both can be overridden. Existing Gemma generation
 and Qwen/Ollama target settings are preserved.
@@ -49,6 +49,18 @@ The default scenario model remains `gemma-4-26b`; use an actual served model nam
 Each new stage records the model/service it used without credentials, so saved
 results remain distinguishable from the next-run model choices.
 
+For Gemini Flash and other Google models, enter your Google AI Studio key in
+**Service connections → Google Gemini**, click **Load Google models**, select
+**Google Gemini** for the desired roles and choose an available chat model. Then
+click **Save model choices**. A model can also be entered manually. The demo uses
+[Google's official OpenAI-compatible API](https://ai.google.dev/gemini-api/docs/openai)
+directly, without a LiteLLM proxy. Its endpoint is fixed to Google. Set
+`GEMINI_API_KEY` (or `GOOGLE_API_KEY`) in the local environment as an alternative.
+The Google key is separate from the LiteLLM key, never returned to the browser,
+and redacted from logs, results and error messages. An empty key field preserves
+the saved key. Model availability, quotas and supported request formats depend
+on the Google account and selected model.
+
 For evaluation, start [Ollama](https://ollama.com) and install a tool-capable Qwen
 model, for example `ollama pull qwen2.5:14b`. The target defaults to
 `http://127.0.0.1:11434/v1` and `qwen2.5:14b`. **Load Ollama models** lists installed
@@ -63,7 +75,7 @@ support in Garak PR #11 uses the OpenAI-compatible chat path.
    including themes, taxonomy filters, grounding confidence, and evidence.
 2. **Scenario Generator:** choose the entry-point profile, generation mode, and
    per-pattern limit on the page, then generate using this run's extraction.
-   Inspect admission/quarantine data,
+   Inspect admitted/rejected scenario data,
    risk traceability, and behavior specifications; select a supported scenario.
 3. **Artifact Generator:** generate and validate that scenario's conversation,
    tool-call context, and success/blocked rubric. Invalid artifacts stop the chain.
@@ -83,6 +95,8 @@ are not estimates of model completion. Download the full execution log or open
 **Earlier activity** for previous stage attempts. Older saved runs retain their
 original logs. The run selector opens saved results.
 Zero admitted scenarios, failed validation, and failed evaluations stay visible.
+The UI calls drafts that failed generation or admission checks **Rejected scenarios**.
+The underlying pipeline files retain their upstream `quarantine` field/path names.
 
 ### Scenario generation options
 

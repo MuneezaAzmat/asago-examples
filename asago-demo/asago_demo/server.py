@@ -161,15 +161,19 @@ def make_handler(coordinator):
                     if set(data) - {"provider", "base_url", "api_key"}:
                         raise ValueError("Unknown model discovery field")
                     provider = data.get("provider")
-                    if provider not in ("litellm", "ollama"):
-                        raise ValueError("Choose LiteLLM or Ollama")
+                    if provider not in ("litellm", "ollama", "google"):
+                        raise ValueError("Choose LiteLLM, Ollama or Google Gemini")
                     changes = {}
+                    if provider == "google" and "base_url" in data:
+                        raise ValueError("Google Gemini uses its official API endpoint")
                     if "base_url" in data:
                         changes["base_url" if provider == "litellm" else "ollama_base_url"] = data[
                             "base_url"
                         ]
-                    if provider == "litellm" and "api_key" in data:
-                        changes["api_key"] = data["api_key"]
+                    if provider in {"litellm", "google"} and "api_key" in data:
+                        changes["google_api_key" if provider == "google" else "api_key"] = data[
+                            "api_key"
+                        ]
                     settings = coordinator.settings.preview(changes)
                     connection = provider_connection(settings, provider)
                     if not connection["base_url"]:
@@ -183,7 +187,9 @@ def make_handler(coordinator):
                         response.raise_for_status()
                         models = sorted(
                             {
-                                entry["id"]
+                                entry["id"].removeprefix("models/")
+                                if provider == "google"
+                                else entry["id"]
                                 for entry in response.json().get("data", [])
                                 if isinstance(entry.get("id"), str)
                             }

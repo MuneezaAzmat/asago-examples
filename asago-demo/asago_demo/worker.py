@@ -128,7 +128,7 @@ def summarize_scenarios(run: Path, run_dir: Path) -> dict:
         "source": "live",
         "error": ""
         if rows
-        else "No scenarios were admitted. Inspect quarantine and coverage gaps.",
+        else "No scenarios were admitted. Inspect rejected scenarios and coverage gaps.",
         "run_dir": str(run_dir.relative_to(run)),
         "scenarios": rows,
         "admitted": admitted if decisions else len(rows),
@@ -200,9 +200,7 @@ def scenarios(run: Path, config: dict) -> dict:
     data["generation_options"] = options
     if threats_path:
         data["scope_file"] = threats_path.name
-    print(
-        f"Scenarios: {data['admitted']} admitted, {data['quarantined']} quarantined.", flush=True
-    )
+    print(f"Scenarios: {data['admitted']} admitted, {data['quarantined']} rejected.", flush=True)
     return data
 
 
@@ -278,10 +276,7 @@ def run_stage(stage: str, run: Path, config: dict) -> dict:
             "evaluation": evaluation,
         }[stage](run, config)
     except Exception as exc:
-        error = str(exc)
-        key = config.get("api_key", "")
-        if key and key != "none":
-            error = error.replace(key, "[redacted]")
+        error = redact_value(str(exc), config)
         print(f"{stage} stopped: {error}", flush=True)
         result = {"status": "failed", "error": error}
     result = redact_value(result, config)

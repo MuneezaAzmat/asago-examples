@@ -8,6 +8,49 @@ import pytest
 from asago_demo.runtime import Coordinator, Settings, redacted_file, safe_child
 
 
+def test_google_uses_its_own_key_and_fixed_endpoint(tmp_path):
+    from asago_demo.runtime import model_connection, redact_value
+
+    settings = Settings(
+        tmp_path, defaults={"api_key": "proxy-secret", "base_url": "https://proxy.example/v1"}
+    )
+    settings.update(
+        {
+            "google_api_key": "google-secret",
+            "scenario_provider": "google",
+            "model": "gemini-flash-test",
+        }
+    )
+    config = settings.private()
+    expected = {
+        "provider": "google",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "api_key": "google-secret",
+        "model": "gemini-flash-test",
+    }
+    assert model_connection(config, "scenario") == expected
+    assert model_connection(config, "artifact") == expected
+    assert model_connection(config, "judge") == expected
+    settings.update({"model": "models/gemini-flash-test"})
+    assert model_connection(settings.private(), "scenario")["model"] == "gemini-flash-test"
+    assert model_connection(config, "target")["api_key"] == "ollama"
+    settings.update({"google_api_key": "", "api_key": ""})
+    assert settings.private()["google_api_key"] == "google-secret"
+    assert settings.public()["google_api_key_configured"]
+    assert "google-secret" not in json.dumps(settings.public())
+    assert "proxy-secret" not in json.dumps(settings.public())
+    assert redact_value("google-secret proxy-secret", config) == "[redacted] [redacted]"
+    settings.update({"scenario_provider": "litellm", "model": "gemma"})
+    assert model_connection(settings.private(), "scenario")["api_key"] == "proxy-secret"
+
+
+def test_google_requires_key_before_saving_selected_role(tmp_path):
+    settings = Settings(tmp_path, defaults={})
+    with pytest.raises(ValueError, match="Google.*key"):
+        settings.update({"scenario_provider": "google", "model": "gemini-flash-test"})
+    assert not settings.path.exists()
+
+
 def test_models_can_use_independent_services_without_leaking_litellm_key(tmp_path):
     from asago_demo.runtime import model_connection
 
