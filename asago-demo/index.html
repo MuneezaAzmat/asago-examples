@@ -114,6 +114,68 @@
             ><button id="run-stage" class="secondary">Load saved policy</button>
           </div>
         </header>
+        <form
+          id="scenario-options"
+          class="scenario-options"
+          hidden
+          aria-label="Scenario generation options"
+        >
+          <div class="scenario-options-heading">
+            <h3>Generation options</h3>
+            <span>Used by Run scenarios and Run demo</span>
+          </div>
+          <div class="scenario-options-fields">
+            <label for="scenario-profile"
+              ><span id="profile-label">Entry-point profile</span>
+              <select
+                id="scenario-profile"
+                aria-labelledby="profile-label"
+                aria-describedby="profile-help"
+              >
+                <option value="direct">Direct input · 1 entry point</option>
+                <option value="full">Full Klarna · 3 inputs</option>
+              </select>
+              <small id="profile-help"></small>
+            </label>
+            <label for="generation-mode"
+              ><span id="mode-label">Generation mode</span>
+              <select
+                id="generation-mode"
+                aria-labelledby="mode-label"
+                aria-describedby="mode-help"
+              >
+                <option value="coverage">Cover entry points</option>
+                <option value="exhaustive">Explore attack patterns</option>
+              </select>
+              <small id="mode-help"></small>
+            </label>
+            <label for="pattern-limit"
+              ><span id="limit-label">Variants per attack pattern</span>
+              <input
+                id="pattern-limit"
+                aria-labelledby="limit-label"
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                value="1"
+                required
+                aria-describedby="limit-help"
+              />
+              <small id="limit-help"></small>
+            </label>
+          </div>
+          <p
+            id="generation-expectation"
+            class="generation-expectation"
+            role="status"
+          ></p>
+          <p class="scenario-options-note">
+            Changes are saved when you start scenario generation. Final counts
+            depend on qualification and validation.
+          </p>
+          <p id="run-generation-options" class="run-generation-options"></p>
+        </form>
         <div id="results"></div>
       </section>
       <details id="logs" class="technical">

@@ -17,6 +17,27 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGES = ("policy", "scenarios", "artifact", "evaluation")
+SCENARIO_DEFAULTS = {
+    "scenario_profile": "direct",
+    "generation_mode": "coverage",
+    "max_scenarios_per_pattern": 1,
+}
+SCENARIO_PROFILES = {
+    "direct": "klarna-direct-canary-profile.yaml",
+    "full": "klarna-capability-profile.yaml",
+}
+
+
+def scenario_options(config: dict) -> dict:
+    options = {key: config.get(key, value) for key, value in SCENARIO_DEFAULTS.items()}
+    if options["scenario_profile"] not in ("direct", "full"):
+        raise ValueError("Choose the direct-input or full Klarna profile")
+    if options["generation_mode"] not in ("coverage", "exhaustive"):
+        raise ValueError("Choose coverage or exhaustive generation")
+    cap = options["max_scenarios_per_pattern"]
+    if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 10:
+        raise ValueError("Variants per attack pattern must be a whole number from 1 to 10")
+    return options
 
 
 def redact_value(value, config):
@@ -71,6 +92,7 @@ class Settings:
         "timeout",
         "target_base_url",
         "target_model",
+        *SCENARIO_DEFAULTS,
     }
 
     def __init__(self, root: Path = ROOT, defaults: dict | None = None):
@@ -94,7 +116,7 @@ class Settings:
                 "target_base_url": "http://127.0.0.1:11434/v1",
                 "target_model": "qwen2.5:14b",
             }
-        self.defaults = defaults
+        self.defaults = {**SCENARIO_DEFAULTS, **defaults}
 
     def private(self) -> dict:
         saved = json.loads(self.path.read_text()) if self.path.exists() else {}
@@ -115,11 +137,14 @@ class Settings:
             if key == "timeout":
                 if isinstance(value, bool) or not isinstance(value, int) or not 10 <= value <= 900:
                     raise ValueError("Timeout must be between 10 and 900 seconds")
+            elif key == "max_scenarios_per_pattern":
+                scenario_options({**values, key: value})
             elif not isinstance(value, str) or len(value) > 4096:
                 raise ValueError("Configuration fields must be text")
             if key == "api_key" and not value:
                 continue
             values[key] = value.strip() if isinstance(value, str) else value
+        scenario_options(values)
         for field in ("base_url", "target_base_url"):
             parsed = urlparse(values.get(field, ""))
             if values.get(field) and (
@@ -277,6 +302,10 @@ class Coordinator:
                 with self.lock:
                     self.active_stage = stage
                     self.state["stages"][stage] = {"status": "running", "started": time.time()}
+                    if stage == "scenarios":
+                        self.state["stages"][stage]["generation_options"] = scenario_options(
+                            config
+                        )
                     self._save()
                 env = {**os.environ, "ASAGO_DEMO_CONFIG": json.dumps(config)}
                 with self.lock:

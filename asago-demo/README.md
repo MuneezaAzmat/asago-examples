@@ -38,8 +38,9 @@ models. Tool support in Garak PR #11 uses the OpenAI-compatible chat path.
    No extraction model call is made. Explore the actual interactive report from
    [Policy Mapper PR #79](https://github.com/asago-ai/asago-policy-mapper/pull/79),
    including themes, taxonomy filters, grounding confidence, and evidence.
-2. **Scenario Generator:** generate scenarios using this run's extraction and the
-   reviewed Klarna direct-input canary profile. Inspect admission/quarantine data,
+2. **Scenario Generator:** choose the entry-point profile, generation mode, and
+   per-pattern limit on the page, then generate using this run's extraction.
+   Inspect admission/quarantine data,
    risk traceability, and behavior specifications; select a supported scenario.
 3. **Artifact Generator:** generate and validate that scenario's conversation,
    tool-call context, and success/blocked rubric. Invalid artifacts stop the chain.
@@ -52,6 +53,30 @@ models. Tool support in Garak PR #11 uses the OpenAI-compatible chat path.
 by Garak. **Stop run** stops the active worker; duplicate jobs are rejected.
 **Run activity** shows actual pipeline logs. The run selector opens saved results.
 Zero admitted scenarios, failed validation, and failed evaluations stay visible.
+
+### Scenario generation options
+
+The Scenario Generator tab exposes the settings used by both **Run scenarios**
+and **Run demo**. Changes are saved when scenario generation starts. The defaults
+remain the quick direct-input profile, coverage mode, and a per-pattern limit of 1.
+
+- **Entry-point profile:** Direct input has one entry point (user messages).
+  Full Klarna adds retrieved knowledge (RAG) and authenticated customer context,
+  for three input entry points. Output APIs and human escalation are not counted.
+- **Generation mode:** Cover entry points (`coverage`) selects one primary scenario
+  per feasible entry point, keeping alternatives as fallbacks. Explore attack
+  patterns (`exhaustive`) attempts eligible candidates up to the per-pattern limit;
+  this can produce more scenarios and take longer.
+- **Variants per attack pattern:** a limit from 1 to 10, not a total batch size.
+  Coverage mode prioritizes covering entry points and can exceed this limit when
+  needed. Increasing it alone does not add variants for a single entry point.
+
+Qualification and validation determine the final count; selecting the full profile
+does not guarantee three admitted scenarios. New runs retain the options used in
+their scenario-stage state, shown separately from the next-run controls. Older
+saved runs are labeled as having no recorded generation settings. Controls are
+disabled while a run is active. Artifact generation still uses the selected
+supported scenario.
 
 The target receives replayed scenario context. Its proposed tool calls are
 captured without executing business tools. Artifact validation is separate from

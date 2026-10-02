@@ -35,6 +35,76 @@ def test_settings_reject_unknown_fields_and_bad_urls(tmp_path):
         settings.update({"base_url": "file:///tmp/private"})
 
 
+def test_scenario_choices_persist_without_replacing_connection_settings(tmp_path):
+    settings = Settings(tmp_path, defaults={"api_key": "private-key", "model": "gemma"})
+    settings.update(
+        {
+            "scenario_profile": "full",
+            "generation_mode": "exhaustive",
+            "max_scenarios_per_pattern": 3,
+        }
+    )
+    restored = Settings(tmp_path, defaults={}).public()
+    assert restored["scenario_profile"] == "full"
+    assert restored["generation_mode"] == "exhaustive"
+    assert restored["max_scenarios_per_pattern"] == 3
+    assert restored["model"] == "gemma"
+    assert settings.private()["api_key"] == "private-key"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"scenario_profile": "../custom.yaml"},
+        {"generation_mode": "unknown"},
+        {"max_scenarios_per_pattern": 0},
+        {"max_scenarios_per_pattern": 11},
+        {"max_scenarios_per_pattern": True},
+        {"max_scenarios_per_pattern": "3"},
+    ],
+)
+def test_invalid_scenario_choices_do_not_replace_saved_settings(tmp_path, changes):
+    settings = Settings(tmp_path, defaults={})
+    settings.update({"scenario_profile": "full"})
+    before = settings.path.read_text()
+    with pytest.raises(ValueError):
+        settings.update(changes)
+    assert settings.path.read_text() == before
+
+
+def test_scenario_run_records_the_options_sent_to_its_worker(tmp_path, monkeypatch):
+    code = """
+import json, os, sys
+from pathlib import Path
+stage, root = sys.argv[1], Path(sys.argv[2])
+config = json.loads(os.environ['ASAGO_DEMO_CONFIG'])
+result = {'status': 'completed'}
+if stage == 'scenarios':
+    result['options_received'] = {key: config[key] for key in
+        ('scenario_profile', 'generation_mode', 'max_scenarios_per_pattern')}
+(root / (stage + '.json')).write_text(json.dumps(result))
+"""
+    c = make_coordinator(tmp_path, monkeypatch, code)
+    c.settings.update(
+        {
+            "scenario_profile": "full",
+            "generation_mode": "exhaustive",
+            "max_scenarios_per_pattern": 2,
+        }
+    )
+    c.start("all")
+    state = wait_for_finish(c)
+    expected = {
+        "scenario_profile": "full",
+        "generation_mode": "exhaustive",
+        "max_scenarios_per_pattern": 2,
+    }
+    assert state["results"]["scenarios"]["options_received"] == expected
+    assert state["stages"]["scenarios"]["generation_options"] == expected
+    c.settings.update({"scenario_profile": "direct", "generation_mode": "coverage"})
+    assert c.current()["stages"]["scenarios"]["generation_options"] == expected
+
+
 def test_download_paths_cannot_escape_even_through_symlinks(tmp_path):
     root = tmp_path / "public"
     root.mkdir()

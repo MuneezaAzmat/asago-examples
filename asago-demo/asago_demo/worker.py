@@ -13,7 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from asago_demo.evaluation import evaluation  # noqa: E402
-from asago_demo.runtime import STAGES, atomic_json, redact_value, safe_child  # noqa: E402
+from asago_demo.runtime import (  # noqa: E402
+    SCENARIO_PROFILES,
+    STAGES,
+    atomic_json,
+    redact_value,
+    safe_child,
+    scenario_options,
+)
 
 EXAMPLES = ROOT.parent
 INPUTS = EXAMPLES / "asago-scenario-generator/inputs"
@@ -136,9 +143,10 @@ def scenarios(run: Path, config: dict) -> dict:
     extraction = run / "policy/risk-extraction.json"
     if not extraction.is_file():
         raise ValueError("Load the saved policy extraction first")
+    options = scenario_options(config)
     print("Generating Klarna scenarios from this run's saved FS-ISAC extraction.", flush=True)
     print(
-        "Coverage configuration: reviewed direct-input profile, one technique per scenario.",
+        f"Scenario configuration: {json.dumps(options)}; one technique per scenario.",
         flush=True,
     )
     result = run_pipeline(
@@ -146,14 +154,14 @@ def scenarios(run: Path, config: dict) -> dict:
         risk_extraction_path=extraction,
         sssom_path=INPUTS / "mappings/risk_to_category.sssom.tsv",
         output_dir=run / "scenario-generation",
-        profile_path=INPUTS / "profiles/klarna-direct-canary-profile.yaml",
+        profile_path=INPUTS / "profiles" / SCENARIO_PROFILES[options["scenario_profile"]],
         qualification_facts_path=INPUTS / "profiles/klarna-qualification-facts.yaml",
         base_url=config["base_url"],
         api_key=config.get("api_key", "none"),
         model=config["model"],
         max_techniques=1,
-        max_scenarios_per_pattern=1,
-        generation_mode="coverage",
+        max_scenarios_per_pattern=options["max_scenarios_per_pattern"],
+        generation_mode=options["generation_mode"],
         eval=True,
     )
     data = summarize_scenarios(run, Path(result.run_dir))

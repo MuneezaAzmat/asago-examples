@@ -54,6 +54,9 @@ Do not commit environments, dependency caches, credentials, notebook outputs, or
 run results. `./asago-demo/setup.sh` installs the locked workspace, fetches only
 the pinned policy report files, and prepares the separate Python 3.13 Garak
 environment. Keep PR dependency revisions explicit until the features are released.
+Scenario options are validated by `asago_demo.runtime`, applied by the worker,
+and recorded in each scenario stage's `generation_options`. Keep saved-run labels
+separate from the dashboard's next-run settings.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

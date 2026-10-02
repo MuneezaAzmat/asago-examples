@@ -17,6 +17,7 @@ let selectedRun = "",
 let scenarioSearch = "",
   surfaceFilter = "";
 let observedActiveId = null;
+let scenarioOptionsDirty = false;
 const { chooseRunId, canRenderResult } = window.AsagoViewState;
 const names = {
   policy: "Policy Mapper",
@@ -102,6 +103,7 @@ function controls() {
   $("#cancel").hidden = !snapshot?.busy;
   $("#history").disabled = !!busy;
   $("#settings-open").disabled = !!busy;
+  renderScenarioOptions(busy);
   const info = run?.stages?.[activeTab];
   const upstream = {
     scenarios: "policy",
@@ -131,6 +133,51 @@ function controls() {
           ? "Waiting"
           : status;
   }
+}
+function readScenarioOptions() {
+  return {
+    scenario_profile: $("#scenario-profile").value,
+    generation_mode: $("#generation-mode").value,
+    max_scenarios_per_pattern: $("#pattern-limit").valueAsNumber,
+  };
+}
+function renderScenarioOptions(busy) {
+  $("#scenario-options").hidden = activeTab !== "scenarios";
+  if (!scenarioOptionsDirty && snapshot?.settings) {
+    const settings = snapshot.settings;
+    $("#scenario-profile").value = settings.scenario_profile || "direct";
+    $("#generation-mode").value = settings.generation_mode || "coverage";
+    $("#pattern-limit").value = settings.max_scenarios_per_pattern ?? 1;
+  }
+  $("#scenario-options")
+    .querySelectorAll("select, input")
+    .forEach((el) => {
+      el.disabled = !!busy || !snapshot;
+    });
+  const options = readScenarioOptions();
+  const full = options.scenario_profile === "full";
+  const coverage = options.generation_mode === "coverage";
+  $("#profile-help").textContent = full
+    ? "User messages, retrieved knowledge (RAG), and authenticated customer context."
+    : "User messages through the Klarna app and web. The quick demo profile.";
+  $("#mode-help").textContent = coverage
+    ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
+    : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
+  $("#limit-help").textContent = coverage
+    ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
+    : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
+  $("#generation-expectation").textContent = coverage
+    ? full
+      ? "Current selection: aim to cover 3 input entry points with one admitted scenario each."
+      : "Current selection: aim for 1 admitted scenario for the single input entry point."
+    : `Current selection: attempt up to ${Number.isInteger(options.max_scenarios_per_pattern) ? options.max_scenarios_per_pattern : "…"} ${options.max_scenarios_per_pattern === 1 ? "scenario" : "scenarios"} per eligible attack pattern across ${full ? "3 input entry points" : "1 input entry point"}.`;
+  const stage = snapshot?.run?.stages?.scenarios;
+  const recorded = stage?.generation_options;
+  const label = $("#run-generation-options");
+  label.hidden = !stage || stage.status === "pending";
+  label.textContent = recorded
+    ? `${stage.status === "running" ? "Running with" : "Displayed run used"}: ${recorded.scenario_profile === "full" ? "Full Klarna · 3 input entry points" : "Direct input · 1 entry point"} / ${recorded.generation_mode === "coverage" ? "Cover entry points" : "Explore attack patterns"} / per-pattern limit ${recorded.max_scenarios_per_pattern}.`
+    : "This saved run predates option tracking; its generation settings were not recorded.";
 }
 function formatTime(seconds) {
   const n = Math.max(0, Math.floor(seconds));
@@ -290,7 +337,7 @@ function render() {
         policy:
           "Load the saved FS-ISAC extraction to explore the interactive policy report. No policy model calls are needed.",
         scenarios:
-          "Load the policy results, then run the reviewed Klarna coverage configuration. Admitted scenarios and their evidence will appear here.",
+          "Load the policy results, choose generation options above, then run scenarios. Admitted scenarios and their evidence will appear here.",
         artifact:
           "Generate scenarios, choose one, then build its Garak transcript and detector rubric.",
         evaluation:
@@ -345,10 +392,22 @@ async function poll() {
   }
 }
 async function start(stage) {
+  if (stage === "scenarios" || stage === "all") {
+    if (!$("#scenario-options").checkValidity()) {
+      selectTab("scenarios");
+      $("#scenario-options").reportValidity();
+      return;
+    }
+  }
   pending = true;
   notice("");
   controls();
   try {
+    if (stage === "scenarios" || stage === "all") {
+      const settings = await api("/api/settings", readScenarioOptions());
+      snapshot.settings = settings;
+      scenarioOptionsDirty = false;
+    }
     const result = await api("/api/start", {
       stage,
       run: selectedRun || null,
@@ -367,6 +426,13 @@ async function start(stage) {
   }
 }
 
+$("#scenario-options").addEventListener("submit", (event) => {
+  event.preventDefault();
+});
+$("#scenario-options").addEventListener("input", () => {
+  scenarioOptionsDirty = true;
+  renderScenarioOptions(snapshot?.busy || pending);
+});
 document
   .querySelectorAll("[data-tab]")
   .forEach((el) =>
