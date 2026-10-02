@@ -297,7 +297,7 @@ function renderActivity() {
         stage !== "policy" && info.timeout
           ? info.timeout_scope === "evaluation"
             ? `${info.timeout}s deadline for the complete target + judge evaluation`
-            : `${info.timeout}s timeout per model request; retries may add time`
+            : `${info.timeout}s timeout per model request`
           : "",
         displayMessage(info.error),
       ]
@@ -309,7 +309,6 @@ function renderActivity() {
     .join("");
   $("#activity-details").innerHTML = `
     <div class="activity-heading"><strong>${escapeHTML(activity.stage === "all" ? "Full demo" : names[activity.stage] || "Saved activity")}</strong><span>Started ${escapeHTML(new Date(activity.started * 1000).toLocaleTimeString())} · ${formatTime(activity.elapsed)} elapsed</span></div>
-    <p class="activity-note">Activity resets when you start the next demo or stage. Earlier logs stay saved.</p>
     <ul class="activity-stages">${stageRows}</ul>
     <div class="activity-progress"><strong>${activity.status === "running" ? "Current step" : "Last pipeline step"}</strong><p>${escapeHTML(phase)}</p>
     ${latest ? `<strong>Latest output${activity.last_output_at ? " · " + escapeHTML(new Date(activity.last_output_at * 1000).toLocaleTimeString()) : ""}</strong><p>${escapeHTML(latest)}</p>` : ""}
