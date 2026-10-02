@@ -484,3 +484,35 @@ def test_recording_preset_is_repeatable_and_preserves_credentials(tmp_path):
         "generation_mode": "exhaustive",
         "max_scenarios_per_pattern": 1,
     }
+
+
+@pytest.mark.parametrize("provider", ["google", "ollama", "litellm"])
+def test_presets_preserve_selected_models_and_connections(tmp_path, provider):
+    from asago_demo.runtime import SCENARIO_PRESETS
+
+    settings = Settings(
+        tmp_path,
+        defaults={
+            "scenario_provider": provider,
+            "model": "chosen-model",
+            "judge_provider": "ollama",
+            "judge_model": "chosen-judge",
+            "google_api_key": "google-secret",
+            "api_key": "proxy-secret",
+            "timeout": 300,
+        },
+    )
+    before = settings.private()
+    for preset in SCENARIO_PRESETS.values():
+        settings.update(preset)
+        after = settings.private()
+        for key in (
+            "scenario_provider",
+            "model",
+            "judge_provider",
+            "judge_model",
+            "google_api_key",
+            "api_key",
+            "timeout",
+        ):
+            assert after[key] == before[key]

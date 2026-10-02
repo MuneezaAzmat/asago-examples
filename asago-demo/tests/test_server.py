@@ -195,3 +195,14 @@ def test_google_discovery_cannot_redirect_key_to_custom_url(server, monkeypatch)
     with pytest.raises(urllib.error.HTTPError) as error:
         urllib.request.urlopen(request)
     assert "official API endpoint" in error.value.read().decode()
+
+
+def test_search_plan_endpoint_is_read_only(server):
+    base, coordinator = server
+    with urllib.request.urlopen(base + "/api/search-plan") as response:
+        data = json.load(response)
+    assert data["seed_count"] > 4
+    assert data["input_count"] == 3
+    assert data["model_calls"] == 0
+    assert not coordinator.busy
+    assert coordinator.history() == []

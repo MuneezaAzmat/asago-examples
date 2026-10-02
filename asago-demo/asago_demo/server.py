@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT))
 
 from asago_demo.runtime import (  # noqa: E402
     DEMO_PRESET,
+    FULL_SEARCH_OPTIONS,
+    SCENARIO_PRESETS,
     Coordinator,
     Settings,
     model_connection,
@@ -68,8 +70,14 @@ def make_handler(coordinator):
                             "active_id": coordinator.active_id,
                             "settings": coordinator.settings.public(),
                             "demo_preset": DEMO_PRESET,
+                            "scenario_presets": SCENARIO_PRESETS,
+                            "full_search_options": FULL_SEARCH_OPTIONS,
                         }
                     )
+                if route == "/api/search-plan":
+                    from asago_demo.planning import full_search_plan
+
+                    return self.send(full_search_plan())
                 if route.startswith("/files/"):
                     path = safe_child(coordinator.runs, route.removeprefix("/files/"))
                     if path.suffix not in {

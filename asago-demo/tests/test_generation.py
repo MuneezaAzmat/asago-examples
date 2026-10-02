@@ -118,3 +118,60 @@ def test_recording_filter_prompt_states_the_existing_length_bound(monkeypatch):
     assert result == "unchanged result"
     assert seen["model"] is response_model
     assert "220 characters" in seen["prompt"]
+
+
+@pytest.mark.parametrize("provider", ["ollama", "litellm"])
+def test_non_google_models_keep_native_schema(provider):
+    from asago_scenario_generator.pipeline.generate import behavior_semantics as behavior
+
+    response_model = behavior.build_behavior_draft_response_model
+    with generation_compatibility(provider=provider, demo_preset=True):
+        assert behavior.build_behavior_draft_response_model is response_model
+        assert (
+            response_model(["a0", "p0"]).model_json_schema()["properties"]["scenarios"]["maxItems"]
+            == 8
+        )
+
+
+def test_ollama_serializes_concurrent_requests_without_google_schema_or_pacing(monkeypatch):
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    from asago_scenario_generator.llm.client import LLMClient
+
+    from asago_demo.generation import RequestPacer
+
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def complete(self, system_prompt, user_prompt, response_format=None):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(active, peak)
+        time.sleep(0.02)
+        with lock:
+            active -= 1
+        return user_prompt
+
+    def unexpected_pacing(_self):
+        raise AssertionError("Google pacing must not apply to Ollama")
+
+    monkeypatch.setattr(LLMClient, "complete", complete)
+    monkeypatch.setattr(RequestPacer, "wait", unexpected_pacing)
+    with generation_compatibility(provider="ollama", demo_preset=True):
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            results = list(
+                pool.map(
+                    lambda i: LLMClient.complete(
+                        SimpleNamespace(model="qwen2.5:14b"), "system", str(i)
+                    ),
+                    range(3),
+                )
+            )
+    assert peak == 1
+    assert results == ["0", "1", "2"]
+    assert LLMClient.complete is complete

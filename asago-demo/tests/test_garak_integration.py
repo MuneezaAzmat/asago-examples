@@ -112,3 +112,45 @@ def test_evaluation_routes_target_and_judge_to_separate_services(tmp_path, monke
     ]
     assert result["target_provider"] == "litellm"
     assert result["judge_model"] == "local-judge"
+
+
+@pytest.mark.parametrize("provider", ["google", "ollama"])
+def test_provider_request_parameters_and_errors(tmp_path, monkeypatch, provider):
+    pytest.importorskip("garak")
+    import httpx
+    from garak import _config
+    from garak.generators.openai import OpenAICompatible
+
+    from asago_demo.evaluation import configure_generator, generator_options
+
+    for name in ("XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"):
+        monkeypatch.setenv(name, str(tmp_path / name))
+    _config.load_base_config()
+    _config.run.seed = 42
+    connection = {
+        "provider": provider,
+        "model": "test-model",
+        "base_url": "https://model.example/v1",
+        "api_key": "test-key",
+    }
+    generator = OpenAICompatible(
+        name="test-model",
+        config_root={
+            "generators": {"openai": {"OpenAICompatible": generator_options(connection)}}
+        },
+    )
+    seen = []
+
+    def transport(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(400, json={"error": {"message": "model does not support tools"}})
+
+    generator.client._client = httpx.Client(transport=httpx.MockTransport(transport))
+    configure_generator(generator, connection, "Target", 120)
+    with pytest.raises(ValueError, match="Target.*does not support tools"):
+        generator._call_model(build_conversation(artifact())["messages"])
+    assert ("frequency_penalty" in seen[0]) is (provider != "google")
+    assert ("stop" in seen[0]) is (provider != "google")
+    assert ("seed" in seen[0]) is (provider != "google")
+    assert seen[0]["messages"] == build_conversation(artifact())["messages"]
+    generator.client.close()

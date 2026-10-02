@@ -161,83 +161,64 @@ function controls() {
 }
 function readScenarioOptions() {
   const scope = $("#scenario-scope").value;
-  const quick = scope !== "full";
-  return {
-    scenario_scope: scope,
-    scenario_profile: scope === "recording" ? "direct" : $("#scenario-profile").value,
-    generation_mode: quick ? "exhaustive" : $("#generation-mode").value,
-    max_scenarios_per_pattern: quick ? 1 : $("#pattern-limit").valueAsNumber,
-  };
+  const config = scope === "full" ? snapshot.full_search_options : snapshot.scenario_presets[scope];
+  return Object.fromEntries(["scenario_scope", "scenario_profile", "generation_mode", "max_scenarios_per_pattern"].map(key => [key, config[key]]));
+}
+let searchPlanLoaded = false;
+let searchPlanLoading = false;
+async function loadSearchPlan() {
+  if (searchPlanLoaded || searchPlanLoading) return;
+  searchPlanLoading = true;
+  try {
+    const plan = await api("/api/search-plan");
+    $("#search-plan-summary").textContent = `${plan.seed_count} seeds · ${plan.input_count} inputs · ${plan.candidate_count} initial candidates · ${plan.after_rules} after rules`;
+    $("#search-tree").innerHTML = window.AsagoViewState.renderSearchTree(plan);
+    searchPlanLoaded = true;
+  } catch (error) {
+    $("#search-plan-summary").textContent = `Could not load the search tree: ${error.message}`;
+  } finally { searchPlanLoading = false; }
 }
 function renderScenarioOptions(busy) {
   $("#scenario-options").hidden = activeTab !== "scenarios";
-  if (!scenarioOptionsDirty && snapshot?.settings) {
-    const settings = snapshot.settings;
-    $("#scenario-scope").value = settings.scenario_scope || "full";
-    $("#scenario-profile").value = settings.scenario_profile || "direct";
-    $("#generation-mode").value = settings.generation_mode || "coverage";
-    $("#pattern-limit").value = settings.max_scenarios_per_pattern ?? 1;
+  if (!snapshot?.settings) return;
+  if (!scenarioOptionsDirty) {
+    const scope = snapshot.settings.scenario_scope || "recording";
+    $("#scenario-scope").value = scope === "quick3" ? "recording" : scope;
   }
-  $("#scenario-options")
-    .querySelectorAll("select, input, button")
-    .forEach((el) => {
-      el.disabled = !!busy || !snapshot;
-    });
+  $("#scenario-scope").disabled = !!busy;
   const options = readScenarioOptions();
-  const quick = options.scenario_scope !== "full";
-  const recording = options.scenario_scope === "recording";
-  const patternCount = recording ? 4 : 3;
-  if (recording) {
-    $("#scenario-profile").value = "direct";
-    $("#scenario-profile").disabled = true;
-  }
-  if (quick) {
-    $("#generation-mode").value = "exhaustive";
-    $("#pattern-limit").value = 1;
-    $("#generation-mode").disabled = true;
-    $("#pattern-limit").disabled = true;
-  }
-  $("#scope-help").textContent = quick
-    ? `Checks only ${patternCount} attack patterns before generation. One scenario per pattern; normal validation still applies.`
-    : "Searches all eligible attack patterns before selecting final scenarios. More model calls.";
-  const full = options.scenario_profile === "full";
-  const coverage = options.generation_mode === "coverage";
-  $("#profile-help").textContent = full
-    ? "User messages, retrieved knowledge (RAG), and authenticated customer context."
-    : "User messages through the Klarna app and web. The quick demo profile.";
-  $("#mode-help").textContent = quick
-    ? `Explores only the preset's ${patternCount} patterns. This mode is fixed for the preset.`
-    : coverage
-      ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
-      : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
-  $("#limit-help").textContent = quick
-    ? "Fixed at one scenario per selected pattern to keep the demo small. Rejected scenarios are kept for inspection."
-    : coverage
-      ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
-      : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
-  $("#generation-expectation").textContent = recording
-    ? `Recording scope: 4 fixed patterns, direct input, one attempt per pattern. ${snapshot?.settings?.scenario_provider === "google" && snapshot?.settings?.model === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash-Lite selected; requests are paced for the demo." : "Select Recording preset in Demo size to restore the tested Gemini 3.1 Flash-Lite model."}`
-    : quick
-    ? `Quick demo: check 3 attack patterns and generate up to 3 validated scenarios. Limited scope: misinformation, fabricated endpoints and reference data.`
-    : coverage
-      ? full
-        ? "Current selection: aim to cover 3 input entry points with one admitted scenario each."
-        : "Current selection: aim for 1 admitted scenario for the single input entry point."
-      : `Current selection: attempt up to ${Number.isInteger(options.max_scenarios_per_pattern) ? options.max_scenarios_per_pattern : "…"} ${options.max_scenarios_per_pattern === 1 ? "scenario" : "scenarios"} per eligible attack pattern across ${full ? "3 input entry points" : "1 input entry point"}.`;
-  const stage = snapshot?.run?.stages?.scenarios;
+  const full = options.scenario_scope === "full";
+  const indirect = options.scenario_scope === "indirect";
+  $("#scope-help").textContent = full
+    ? "Explore eligible attack patterns across user messages, retrieved knowledge and customer context."
+    : indirect
+      ? "Poisoned retrieval responses: up to 3 scenarios, with qualification and validation enabled."
+      : "The existing direct-input preset: 4 fixed patterns, with qualification and validation enabled.";
+  $("#generation-expectation").textContent = full
+    ? "Full search makes more model calls and takes longer than a preset."
+    : "Final scenario counts depend on qualification and validation.";
+  $("#search-plan").hidden = !full;
+  if (full && activeTab === "scenarios") loadSearchPlan();
+  const stage = snapshot.run?.stages?.scenarios;
   const recorded = stage?.generation_options;
   const label = $("#run-generation-options");
   label.hidden = !stage || stage.status === "pending";
   label.textContent = recorded
-    ? `${stage.status === "running" ? "Running with" : "Displayed run used"}: ${scopeLabel(recorded.scenario_scope)} / ${recorded.scenario_profile === "full" ? "Full Klarna · 3 input entry points" : "Direct input · 1 entry point"} / ${recorded.generation_mode === "coverage" ? "Cover entry points" : "Explore attack patterns"} / per-pattern limit ${recorded.max_scenarios_per_pattern}.`
+    ? `${stage.status === "running" ? "Running with" : "Displayed run used"}: ${scopeLabel(recorded.scenario_scope)} / ${profileLabel(recorded.scenario_profile)} / ${recorded.generation_mode} / per-pattern limit ${recorded.max_scenarios_per_pattern}.`
     : "This saved run predates option tracking; its generation settings were not recorded.";
 }
 function scopeLabel(scope) {
-  if (scope === "recording") return "Recording preset · 4 patterns";
-  return scope === "quick3"
-    ? "Quick demo · up to 3 scenarios"
-    : "Full candidate search";
+  return {recording: "Preset – prompt injection", indirect: "Preset – indirect injection", quick3: "Legacy quick demo", full: "Full search"}[scope] || scope;
 }
+function profileLabel(profile) {
+  return {direct: "Direct input · 1 entry point", indirect: "Retrieval response · 1 indirect entry point", full: "Full Klarna · 3 inputs"}[profile] || profile;
+}
+$("#expand-search-tree").addEventListener("click", () => {
+  const nodes = [...$("#search-tree").querySelectorAll("details")];
+  const expand = nodes.some(node => !node.open);
+  nodes.forEach(node => { node.open = expand; });
+  $("#expand-search-tree").textContent = expand ? "Collapse seeds" : "Expand all seeds";
+});
 
 function formatTime(seconds) {
   const n = Math.max(0, Math.floor(seconds));
@@ -301,7 +282,7 @@ function renderActivity() {
       const detail = [
         stage === "policy" ? "Saved extraction · no model call" : models,
         options
-          ? `${scopeLabel(options.scenario_scope)} / ${options.scenario_profile === "direct" ? "Direct input · 1 entry point" : "Full Klarna · 3 entry points"} / ${options.generation_mode} / per-pattern limit ${options.max_scenarios_per_pattern}`
+          ? `${scopeLabel(options.scenario_scope)} / ${profileLabel(options.scenario_profile)} / ${options.generation_mode} / per-pattern limit ${options.max_scenarios_per_pattern}`
           : "",
         stage !== "policy" && info.timeout
           ? info.timeout_scope === "evaluation"
@@ -537,12 +518,13 @@ async function poll() {
   }
 }
 $("#scenario-scope").addEventListener("change", async () => {
-  if ($("#scenario-scope").value !== "recording") return;
+  const scope = $("#scenario-scope").value;
+  if (scope === "full") { scenarioOptionsDirty = true; renderScenarioOptions(snapshot?.busy); return; }
   pending = true;
   notice("");
   controls();
   try {
-    snapshot.settings = await api("/api/settings", snapshot.demo_preset);
+    snapshot.settings = await api("/api/settings", snapshot.scenario_presets[scope]);
     scenarioOptionsDirty = false;
     await poll();
 

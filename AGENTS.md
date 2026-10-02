@@ -72,15 +72,23 @@ Each start creates fresh `activity` metadata and a separate execution log. Retai
 `logs` as the latest 160 lines for notebook compatibility; archive earlier attempts
 in `activity_history`. A full demo shares one activity record across all stages.
 Keep completion, cancellation, failure and restart states consistent with activity.
-Recording and quick demo scopes use a reduced threat input through the pipeline's public
-`threats_path` argument before seed expansion; it must never bypass qualification
-or validation. The quick preset uses T5; recording uses T5 + T10 with direct input, exhaustive
-mode, and one scenario per pattern. `DEMO_PRESET` is the single source for the
-dropdown preset. Keep credentials and target settings intact. The worker-scoped
-`generation_compatibility` bridge guides actor/tree drafts, sizes Google behavior
-schemas, and paces the tested Flash-Lite model. It must not rewrite actors or
-change admission decisions; remove it after equivalent upstream fixes are pinned. Check the installed pattern IDs so catalog changes fail
-explicitly instead of silently increasing the demo workload.
+Scenario presets use a reduced threat input through the pipeline's public
+`threats_path` argument before seed expansion; never bypass qualification or
+validation. Prompt injection preserves T5 + T10, direct input, exhaustive mode,
+one scenario per pattern. Indirect injection uses T6, the declared retrieval
+profile, and up to three scenarios per pattern. Guard the installed pattern IDs.
+`SCENARIO_PRESETS` changes search options only; preserve providers and model settings.
+The webpage shows two presets and Full search, with a read-only cached search tree
+built by `planning.py` from the same profile, saved extraction and installed catalog.
+Keep Google response-schema limits/pacing in `generation.py`, and Google request
+parameter suppression in `evaluation.py`; other providers must not inherit these.
+Serialize Ollama scenario calls in the generation adapter to avoid local request
+queue contention; do not impose Google pacing or schemas on Ollama.
+The worker-scoped bridge guides actor/tree drafts without rewriting generated
+actors or changing admission. `artifact_context.py` translates only the declared,
+provenance-backed retrieval carrier into the pinned generator's legacy surface tag;
+never change admitted scenario files to force a tool-return classification.
+Remove compatibility bridges when equivalent upstream fixes are pinned.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

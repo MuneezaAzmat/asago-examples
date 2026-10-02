@@ -110,3 +110,32 @@ def test_worker_applies_scenario_choices_at_the_pipeline_boundary(
     import os
 
     assert os.environ["ASAGO_SCENARIO_GENERATOR_MODEL_BASE_URL"] == calls[0]["base_url"]
+
+
+def test_indirect_preset_bounds_scope_and_preserves_validation(tmp_path, monkeypatch):
+    import yaml
+    from asago_scenario_generator.pipeline import runner
+
+    from asago_demo.runtime import SCENARIO_PRESETS, scenario_options
+
+    (tmp_path / "policy").mkdir()
+    (tmp_path / "policy/risk-extraction.json").write_text("{}")
+    calls = []
+
+    def pipeline(**kwargs):
+        calls.append(kwargs)
+        output = tmp_path / "scenario-generation/test"
+        output.mkdir(parents=True)
+        return SimpleNamespace(run_dir=output)
+
+    monkeypatch.setattr(runner, "run_pipeline", pipeline)
+    config = {**SCENARIO_PRESETS["indirect"], "google_api_key": "offline"}
+    worker.scenarios(tmp_path, config)
+    call = calls[0]
+    profile = yaml.safe_load(call["profile_path"].read_text())
+    assert {e["controllability"] for e in profile["entry_points"]} == {"indirect"}
+    assert call["max_scenarios_per_pattern"] == 3
+    assert call["generation_mode"] == "exhaustive"
+    assert call["eval"] is True
+    assert set(yaml.safe_load(call["threats_path"].read_text())["threats"]) == {"T6"}
+    assert scenario_options(config)["scenario_profile"] == "indirect"

@@ -103,72 +103,54 @@ Zero admitted scenarios, failed validation, and failed evaluations stay visible.
 The UI calls drafts that failed generation or admission checks **Rejected scenarios**.
 The underlying pipeline files retain their upstream `quarantine` field/path names.
 
-### Tested recording preset
+### Presets and full search
 
-In the Scenario Generator tab, selecting **Recording preset** in the **Demo size**
-dropdown saves these choices together:
-Google `gemini-3.1-flash-lite`, direct input, exhaustive mode, one scenario per
-pattern, a 120-second request timeout, and only T5 + T10 (four seed patterns).
-It preserves credentials and the target model. Your Google API key must already
-be configured. Settings persist across server restarts; selecting the preset again restores them
-after experimenting with other choices.
+The Scenario Generator has one search dropdown, used by both **Run scenarios**
+and **Run demo**:
 
-Two live verifications on October 1, 2026 each produced **3 admitted, Garak-compatible
-scenarios** in **1:54 and 1:58**, with one incompatible projection rejected each time.
-This is an observed result, not a guaranteed count or time. The four-pattern
-scope avoids repeating a full catalog search; normal qualification, final
-admission, and evaluation remain enabled. Successful runs remain available in
-the run selector for reviewing or continuing to artifact generation.
+- **Preset – prompt injection** preserves the original working direct-input
+  preset: T5 + T10, four seed patterns, exhaustive mode, one scenario per pattern.
+- **Preset – indirect injection** uses a declared retrieval-response input and
+  T6's seven seed patterns. The rules and canonical projection select eligible
+  poisoned-tool-output candidates, capped at three scenarios for that pattern.
+- **Full search** uses the full Klarna profile, exhaustive mode and one scenario
+  per pattern. An expandable tree previews the actual installed catalog and
+  FS-ISAC mappings: 24 seeds, three input entry points, 99 initial candidates and
+  69 after deterministic rules with the current pins. It makes no model calls.
+  Branches include their technique IDs and counts; model qualification,
+  projection and admission can reduce the results further.
 
-The demo has a small compatibility bridge for the pinned Scenario Generator:
-actor and filter prompts state the existing per-item length bounds; the recording preset
-asks for a compatible advanced actor and explicit canonical tree ordering.
-Google behavior requests use one group with only the required action/assertion
-slots instead of the rejected 8 × 64 schema. Responses still pass the upstream
-models and compilers. Recording calls to this Flash-Lite model are spaced at
-least 4.2 seconds apart to stay below the observed 15 requests/minute quota.
-No actors are relabeled, validators disabled, or rejected drafts promoted.
-The adapter is scoped to the worker and restored when the stage ends.
+Presets change search options only. They preserve the selected providers, models,
+credentials, target, judge and timeout. Choose those independently in
+**Models & connections**. The previous profile/mode/variant controls are removed
+from the webpage; the notebook configuration API still supports those options.
+Recorded run settings remain separate from the next-run selection.
 
-### Scenario generation options
+The prompt preset was verified with Gemini 3.1 Flash-Lite: three admitted
+scenarios in 1:54 and 1:58. The indirect preset produced three admitted scenarios
+and zero rejected scenarios in about 1:10, with a tool-response artifact passing
+PR #8 validation. These are observed results, not count or speed guarantees.
+Local model capacity, available memory and concurrency affect timing.
 
-The Scenario Generator tab exposes the settings used by both **Run scenarios**
-and **Run demo**. Changes are saved when scenario generation starts. The defaults
-remain the quick direct-input profile, coverage mode, and a per-pattern limit of 1.
+Provider-specific behavior is isolated in adapters. `generation.py` applies the
+smaller behavior response schema and Flash-Lite pacing only to Google requests;
+other providers retain the upstream response schema and have no Google pacing.
+Ollama requests are serialized within a stage so local inference does not queue
+several requests behind one another while their timeouts run. Shared actor/tree
+guidance and filter length hints preserve canonical IDs and existing validation.
+`evaluation.py` omits Gemini-incompatible request fields only for Google and
+reports provider HTTP errors with the failing role/model instead of `NoneType`.
+A Qwen2.5:14b target on Ollama with Gemini as judge completed in about 52 seconds.
+Targets must support the artifact's tool schemas; Gemma2:2b rejects tool requests.
+Qwen generation hit the 120-second request limit in a local trial; Ollama
+generation speed is not yet validated to match the Gemini recording timings.
 
-- **Demo size:** Quick demo restricts the threat input before seed expansion and
-  model filtering to three T5 patterns: misinformation accumulation (AP-T5-01),
-  fabricated endpoints (AP-T5-02), and reference-data manipulation (AP-T5-04).
-  It fixes exhaustive generation and the per-pattern limit at 1, so at most
-  3 scenarios can be admitted. Qualification, generation repair, and validation
-  still run; fewer scenarios can pass. This is a deliberately narrow demonstration,
-  not broad threat coverage. The generated threat input stays with the run for
-  provenance. **Full candidate search** keeps the original behavior and exposes
-  the mode/variant controls below.
-
-- **Entry-point profile:** Direct input has one entry point (user messages).
-  Full Klarna adds retrieved knowledge (RAG) and authenticated customer context,
-  for three input entry points. Output APIs and human escalation are not counted.
-- **Generation mode:** Cover entry points (`coverage`) selects one primary scenario
-  per feasible entry point, keeping alternatives as fallbacks. Explore attack
-  patterns (`exhaustive`) attempts eligible candidates up to the per-pattern limit;
-  this can produce more scenarios and take longer.
-- **Variants per attack pattern:** a limit from 1 to 10, not a total batch size.
-  Coverage mode prioritizes covering entry points and can exceed this limit when
-  needed. Increasing it alone does not add variants for a single entry point.
-
-Qualification and validation determine the final count; selecting the full profile
-does not guarantee three admitted scenarios. New runs retain the options used in
-their scenario-stage state, shown separately from the next-run controls. Older
-saved runs are labeled as having no recorded generation settings. Controls are
-disabled while a run is active. Artifact generation still uses the selected
-supported scenario.
-
-In full candidate search, even a one-scenario coverage run filters multiple candidates with the model before
-generating and validating a scenario. Local model speed, queued requests, timeouts
-and retries can make this take several minutes. Watch **Current step** and
-**Latest warning** in Run activity; the output target is not the number of model
-requests. Trim these waits when recording.
+The indirect profile is an illustrative attacker-access assumption, not a claim
+about Klarna's actual deployment. Its consuming zone is `reasoning`, while its
+transport is a retrieval tool response. `artifact_context.py` maps that explicitly
+declared, provenance-backed input to PR #8's legacy `(tool_execution)` surface tag
+only in the in-memory artifact context. Admitted scenario YAML, canonical zones,
+IDs and validation results remain intact. No rejected drafts are promoted.
 
 The target receives replayed scenario context. Its proposed tool calls are
 captured without executing business tools. Artifact validation is separate from

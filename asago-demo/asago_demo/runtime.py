@@ -30,11 +30,24 @@ DEMO_PRESET = {
     "scenario_profile": "direct",
     "generation_mode": "exhaustive",
     "max_scenarios_per_pattern": 1,
-    "scenario_provider": "google",
-    "model": "gemini-3.1-flash-lite",
-    "timeout": 120,
+}
+SCENARIO_PRESETS = {
+    "recording": DEMO_PRESET,
+    "indirect": {
+        **DEMO_PRESET,
+        "scenario_scope": "indirect",
+        "scenario_profile": "indirect",
+        "max_scenarios_per_pattern": 3,
+    },
+}
+FULL_SEARCH_OPTIONS = {
+    "scenario_scope": "full",
+    "scenario_profile": "full",
+    "generation_mode": "exhaustive",
+    "max_scenarios_per_pattern": 1,
 }
 SCENARIO_PROFILES = {
+    "indirect": "klarna-indirect-demo-profile.yaml",
     "direct": "klarna-direct-canary-profile.yaml",
     "full": "klarna-capability-profile.yaml",
 }
@@ -91,19 +104,22 @@ def model_connection(config: dict, role: str) -> dict:
 
 def scenario_options(config: dict) -> dict:
     options = {key: config.get(key, value) for key, value in SCENARIO_DEFAULTS.items()}
-    if options["scenario_profile"] not in ("direct", "full"):
-        raise ValueError("Choose the direct-input or full Klarna profile")
+    if options["scenario_profile"] not in SCENARIO_PROFILES:
+        raise ValueError("Choose a supported Klarna profile")
     if options["generation_mode"] not in ("coverage", "exhaustive"):
         raise ValueError("Choose coverage or exhaustive generation")
     cap = options["max_scenarios_per_pattern"]
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 10:
         raise ValueError("Variants per attack pattern must be a whole number from 1 to 10")
-    if options["scenario_scope"] not in {"full", "quick3", "recording"}:
-        raise ValueError("Choose the recording preset, quick demo or full search")
+    if options["scenario_scope"] not in {"full", "quick3", "recording", "indirect"}:
+        raise ValueError("Choose a preset or full search")
     if options["scenario_scope"] != "full":
         options.update(generation_mode="exhaustive", max_scenarios_per_pattern=1)
     if options["scenario_scope"] == "recording":
         options["scenario_profile"] = "direct"
+    if options["scenario_scope"] in SCENARIO_PRESETS:
+        preset = SCENARIO_PRESETS[options["scenario_scope"]]
+        options.update({key: preset[key] for key in SCENARIO_DEFAULTS})
     return options
 
 

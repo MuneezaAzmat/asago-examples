@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from asago_demo.artifact_context import adapt_context  # noqa: E402
 from asago_demo.evaluation import evaluation  # noqa: E402
 from asago_demo.runtime import (  # noqa: E402
     SCENARIO_PROFILES,
@@ -96,7 +97,7 @@ def summarize_scenarios(run: Path, run_dir: Path) -> dict:
         data = yaml.safe_load(path.read_text())
         if not isinstance(data, dict) or not data.get("scenario_id"):
             continue
-        ctx = load_scenario(path)
+        ctx = adapt_context(load_scenario(path))
         narrative = data.get("narrative") or {}
         faceting = data.get("faceting") or {}
         risk = faceting.get("risk_card") or {}
@@ -152,9 +153,12 @@ def prepare_demo_scope(run: Path, scope: str) -> Path | None:
     if scope == "recording":
         selected.add("T10")
         expected.add("AP-T10-01")
+    if scope == "indirect":
+        selected = {"T6"}
+        expected = {f"AP-T6-{i:02}" for i in range(1, 8)}
     actual = {p["id"] for p in load_attack_patterns().values() if p["threat_id"] in selected}
     if actual != expected:
-        raise ValueError("The installed attack catalog changed. Update the quick demo preset.")
+        raise ValueError("The installed attack catalog changed. Update the demo preset.")
     source = DATA_ROOT / "taxonomies/owasp-agentic-threats/owasp-agentic-threats-v1.1.yaml"
     data = yaml.safe_load(source.read_text())
     data["threats"] = {key: value for key, value in data["threats"].items() if key in selected}
@@ -163,7 +167,7 @@ def prepare_demo_scope(run: Path, scope: str) -> Path | None:
     print(
         f"[Stage Demo scope] Checking only {len(expected)} attack patterns: "
         + ", ".join(sorted(expected))
-        + ". Up to one scenario per pattern; validation stays enabled.",
+        + ". Qualification and validation stay enabled.",
         flush=True,
     )
     return path
@@ -186,7 +190,8 @@ def scenarios(run: Path, config: dict) -> dict:
         flush=True,
     )
     with generation_compatibility(
-        provider=connection["provider"], demo_preset=options["scenario_scope"] == "recording"
+        provider=connection["provider"],
+        demo_preset=options["scenario_scope"] in {"recording", "indirect"},
     ):
         result = run_pipeline(
             use_case=(INPUTS / "use-cases/use-case-klarna-fs-isac-v36.txt").read_text(),
@@ -228,7 +233,7 @@ def artifact(run: Path, config: dict) -> dict:
         filename = next((s["file"] for s in choices.values() if not s["skip_reason"]), "")
     if filename not in choices:
         raise ValueError("No admitted scenario supports Garak. Inspect the scenario results.")
-    ctx = load_scenario(safe_child(run, filename))
+    ctx = adapt_context(load_scenario(safe_child(run, filename)))
     reason = surface_skip_reason(ctx)
     if reason:
         raise ValueError(f"This scenario cannot run in Garak: {reason}")

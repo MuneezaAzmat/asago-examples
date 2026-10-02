@@ -187,3 +187,17 @@ test("first connection opens the most recent saved run", () => {
     "latest",
   );
 });
+
+
+test("search tree renders every seed and escapes names", () => {
+  const {renderSearchTree} = require("../view-state.js");
+  const html = renderSearchTree({policy:"FS-ISAC",profile:"Klarna",threats:[{
+    id:"T6",name:"<script>bad</script>",seeds:[{id:"AP-T6-03",name:"Poisoned retrieval",inputs:[{
+      id:"retrieval",name:"RAG result",controllability:"indirect",candidate_count:2,after_rules:1,techniques:["AML.T0051"]
+    }]},{id:"AP-T6-04",name:"Unsupported seed",inputs:[]}]
+  }]});
+  assert.ok(html.includes("AP-T6-03") && html.includes("AP-T6-04"));
+  assert.ok(html.includes("RAG result") && html.includes("2 candidates · 1 after rules"));
+  assert.ok(html.includes("Not expanded:"));
+  assert.ok(!html.includes("<script>") && html.includes("&lt;script&gt;"));
+});

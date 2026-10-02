@@ -44,10 +44,11 @@ def generation_compatibility(*, provider: str, demo_preset: bool):
     original_complete = LLMClient.complete
     complete_signature = inspect.signature(original_complete)
     pacer = RequestPacer(4.2)
+    local_request_lock = threading.Lock()
 
     @wraps(original_complete)
     def paced_complete(client, *args, **kwargs):
-        if client.model == "gemini-3.1-flash-lite":
+        if provider == "google" and client.model == "gemini-3.1-flash-lite":
             pacer.wait()
         call = complete_signature.bind(client, *args, **kwargs)
         response_model = call.arguments.get("response_format")
@@ -56,6 +57,11 @@ def generation_compatibility(*, provider: str, demo_preset: bool):
                 "\nKeep each candidate rationale to one short sentence, at most 220 "
                 "characters including spaces (the schema permits at most 240)."
             )
+        if provider == "ollama":
+            # Local inference queues can make concurrent requests time out before
+            # they begin. Each request gets its own timeout after acquiring this lock.
+            with local_request_lock:
+                return original_complete(*call.args, **call.kwargs)
         return original_complete(*call.args, **call.kwargs)
 
     @wraps(original_tree_prompt)
@@ -109,9 +115,9 @@ def generation_compatibility(*, provider: str, demo_preset: bool):
         stack.enter_context(patch.object(actor, "_actor_draft_prompt", concise_actor))
         if demo_preset:
             stack.enter_context(patch.object(tree, "_semantic_user_prompt", ordered_tree))
+        if demo_preset or provider == "ollama":
+            stack.enter_context(patch.object(LLMClient, "complete", paced_complete))
         if provider == "google":
-            if demo_preset:
-                stack.enter_context(patch.object(LLMClient, "complete", paced_complete))
             stack.enter_context(
                 patch.object(
                     behavior_semantics, "build_behavior_draft_response_model", bounded_behavior

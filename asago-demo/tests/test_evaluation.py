@@ -112,3 +112,44 @@ def test_incomplete_attempt_retains_response_without_claiming_a_verdict(tmp_path
     result = summarize_report(path)
     assert result["outcome"] == "inconclusive"
     assert result["attempts"][0]["response"] == "Actual target reply"
+
+
+def test_typed_tool_declarations_preserve_types_and_authored_turns():
+    source = artifact()
+    source["turns"][0]["content"] = (
+        "You are a support assistant.\n"
+        "- lookup_order(order_id: str): Retrieves order details.\n"
+        "- process_refund(order_id: str, amount: float): Processes a refund.\n"
+        "- get_policy_info(query: str): Retrieves support documentation.\n"
+    )
+    source["turns"] = source["turns"][:1] + [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "lookup-1",
+                    "type": "function",
+                    "function": {"name": "lookup_order", "arguments": {"order_id": "KL-9982"}},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "lookup-1", "content": "Order data"},
+    ]
+    entry = build_conversation(source)
+    tools = {t["function"]["name"]: t["function"] for t in entry["tools"]}
+    assert tools["lookup_order"]["parameters"]["properties"] == {"order_id": {"type": "string"}}
+    assert tools["process_refund"]["parameters"]["properties"] == {
+        "order_id": {"type": "string"},
+        "amount": {"type": "number"},
+    }
+    assert tools["process_refund"]["parameters"]["required"] == ["order_id", "amount"]
+    assert entry["messages"][0]["content"] == source["turns"][0]["content"]
+    assert entry["messages"][-1] == source["turns"][-1]
+
+
+def test_unknown_tool_parameter_types_require_explicit_schemas():
+    source = artifact()
+    source["turns"][0]["content"] = "- lookup_order(order_id: UnknownType): Lookup."
+    with pytest.raises(ValueError, match="explicit tool schema for lookup_order"):
+        build_conversation(source)

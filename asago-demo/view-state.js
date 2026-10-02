@@ -70,7 +70,36 @@
           : null,
     };
   }
+  function renderSearchTree(plan) {
+    const escape = value => String(value).replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[char]));
+    const count = (n, label) => `${n} ${label}${n === 1 ? "" : "s"}`;
+    const inputBranch = input => `
+      <li><div class="tree-input">
+        <strong>${escape(input.name)}</strong>
+        <span>${escape(input.controllability)} · ${count(input.candidate_count, "candidate")} · ${input.after_rules} after rules</span>
+        <small>${input.techniques.map(escape).join(" · ")}</small>
+      </div></li>`;
+    const seedBranch = seed => `
+      <li><details>
+        <summary><strong>${escape(seed.id)}</strong> ${escape(seed.name)}</summary>
+        ${seed.inputs.length
+          ? `<ul>${seed.inputs.map(inputBranch).join("")}</ul>`
+          : '<p class="tree-skipped">Not expanded: no applicable technique or required capability.</p>'}
+      </details></li>`;
+    const threatBranch = threat => `
+      <li><details open>
+        <summary><strong>${escape(threat.id)}</strong> ${escape(threat.name)}
+          <span>${count(threat.seeds.length, "seed")}</span>
+        </summary>
+        <ul>${threat.seeds.map(seedBranch).join("")}</ul>
+      </details></li>`;
+    return `<div class="tree-root">${escape(plan.policy)} → ${escape(plan.profile)}</div>
+      <ul>${plan.threats.map(threatBranch).join("")}</ul>`;
+  }
   const exports = {
+    renderSearchTree,
     chooseRunId,
     canRenderResult,
     resolveModel,
