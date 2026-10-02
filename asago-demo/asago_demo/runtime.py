@@ -25,6 +25,15 @@ SCENARIO_DEFAULTS = {
     "generation_mode": "coverage",
     "max_scenarios_per_pattern": 1,
 }
+DEMO_PRESET = {
+    "scenario_scope": "recording",
+    "scenario_profile": "direct",
+    "generation_mode": "exhaustive",
+    "max_scenarios_per_pattern": 1,
+    "scenario_provider": "google",
+    "model": "gemini-3.1-flash-lite",
+    "timeout": 120,
+}
 SCENARIO_PROFILES = {
     "direct": "klarna-direct-canary-profile.yaml",
     "full": "klarna-capability-profile.yaml",
@@ -89,10 +98,12 @@ def scenario_options(config: dict) -> dict:
     cap = options["max_scenarios_per_pattern"]
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 10:
         raise ValueError("Variants per attack pattern must be a whole number from 1 to 10")
-    if options["scenario_scope"] not in {"full", "quick3"}:
-        raise ValueError("Choose the full search or the 3-scenario quick demo")
+    if options["scenario_scope"] not in {"full", "quick3", "recording"}:
+        raise ValueError("Choose the recording preset, quick demo or full search")
     if options["scenario_scope"] != "full":
         options.update(generation_mode="exhaustive", max_scenarios_per_pattern=1)
+    if options["scenario_scope"] == "recording":
+        options["scenario_profile"] = "direct"
     return options
 
 

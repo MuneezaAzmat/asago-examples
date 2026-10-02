@@ -9,6 +9,8 @@ dependencies = [
     "httpx>=0.28",
     "python-dotenv>=1.0",
     "certifi",
+    "pypdfium2>=5.11",
+    "pillow>=11",
     "pytest>=8.0",
     "ruff>=0.15.0",
 ]

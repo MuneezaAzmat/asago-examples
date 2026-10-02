@@ -61,6 +61,33 @@ def test_html_outputs_are_sandboxed_and_traversal_blocked(server):
         urllib.request.urlopen(base + "/files/../settings.json")
 
 
+def test_only_policy_report_can_open_its_pdf_outside_the_sandbox(server):
+    base, coordinator = server
+    policy = coordinator.runs / "test-run" / "policy"
+    policy.mkdir(parents=True)
+    (policy / "report.html").write_text("<h1>Saved policy</h1>")
+    import pypdfium2 as pdfium
+
+    with pdfium.PdfDocument.new() as document:
+        document.new_page(100, 100).close()
+        document.save(policy / "policy.pdf")
+    other = coordinator.runs / "test-run" / "report.html"
+    other.write_text("<h1>Generated report</h1>")
+    for route, can_open in [("policy/report.html", True), ("report.html", False)]:
+        with urllib.request.urlopen(base + "/files/test-run/" + route) as response:
+            csp = response.headers["Content-Security-Policy"]
+        assert ("allow-popups-to-escape-sandbox" in csp) is can_open
+        assert "allow-same-origin" not in csp
+        assert "connect-src 'none'" in csp
+    with urllib.request.urlopen(base + "/files/test-run/policy/policy.pdf") as response:
+        assert response.headers["Content-Type"] == "application/pdf"
+        assert response.read().startswith(b"%PDF-")
+    with urllib.request.urlopen(base + "/files/test-run/policy/document.html") as response:
+        preview = response.read().decode()
+        assert 'alt="Original policy PDF, page 1"' in preview
+        assert 'href="policy.pdf" download="fs-isac.pdf"' in preview
+
+
 @pytest.mark.parametrize(
     "provider,url,key",
     [

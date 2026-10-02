@@ -15,6 +15,7 @@ REPORT_TEMPLATES = ROOT / ".cache/policy-report/src/asago_policy_mapper/template
 sys.path.insert(0, str(ROOT))
 
 from asago_demo.runtime import (  # noqa: E402
+    DEMO_PRESET,
     Coordinator,
     Settings,
     model_connection,
@@ -66,6 +67,7 @@ def make_handler(coordinator):
                             "busy": coordinator.busy,
                             "active_id": coordinator.active_id,
                             "settings": coordinator.settings.public(),
+                            "demo_preset": DEMO_PRESET,
                         }
                     )
                 if route.startswith("/files/"):
@@ -111,10 +113,20 @@ def make_handler(coordinator):
             if path.suffix == ".js":
                 mime = "text/javascript"
             headers = {}
+            policy_report = (
+                report
+                and path.name == "report.html"
+                and path.parent.name == "policy"
+                and path.with_name("policy.pdf").is_file()
+            )
             if report and path.suffix == ".html":
                 # Exported model text/scripts cannot reach the local control API.
+                sandbox = "sandbox allow-scripts allow-downloads"
+                if policy_report:
+                    # The linked PDF opens in its own viewer, outside this frame.
+                    sandbox += " allow-popups allow-popups-to-escape-sandbox"
                 headers["Content-Security-Policy"] = (
-                    "sandbox allow-scripts allow-downloads; "
+                    sandbox + "; "
                     "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; "
                     "style-src 'unsafe-inline'; font-src data:; img-src data:; "
                     "connect-src 'none'"
@@ -122,6 +134,11 @@ def make_handler(coordinator):
             content = path.read_bytes()
             if report and path.suffix != ".pdf":
                 content = redacted_file(path, coordinator.settings.private()).encode("utf-8")
+            if policy_report:
+                from asago_demo.reporting import build_policy_document, customize_policy_header
+
+                build_policy_document(path.with_name("policy.pdf"))
+                content = customize_policy_header(content.decode("utf-8")).encode("utf-8")
             return self.send(content, mime, extra=headers)
 
         def do_POST(self):

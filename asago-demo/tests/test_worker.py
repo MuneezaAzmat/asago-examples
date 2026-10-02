@@ -5,7 +5,7 @@ import pytest
 from asago_demo import worker
 
 
-@pytest.mark.parametrize(("scope", "count"), [("quick3", 3)])
+@pytest.mark.parametrize(("scope", "count"), [("quick3", 3), ("recording", 4)])
 def test_quick_scope_restricts_real_seed_expansion_before_model_calls(tmp_path, scope, count):
     import yaml
     from asago_scenario_generator.data.loaders import load_risk_extraction
@@ -27,7 +27,9 @@ def test_quick_scope_restricts_real_seed_expansion_before_model_calls(tmp_path, 
     )
     seeds = expand_seeds(surface, path)
     assert len(seeds) == count
-    assert {seed.seed_id for seed in seeds} == ({"AP-T5-01", "AP-T5-02", "AP-T5-04"})
+    assert {seed.seed_id for seed in seeds} == (
+        {"AP-T5-01", "AP-T5-02", "AP-T5-04"} | ({"AP-T10-01"} if scope == "recording" else set())
+    )
 
 
 def test_quick_scope_uses_one_scenario_per_pattern(tmp_path, monkeypatch):

@@ -164,7 +164,7 @@ function readScenarioOptions() {
   const quick = scope !== "full";
   return {
     scenario_scope: scope,
-    scenario_profile: $("#scenario-profile").value,
+    scenario_profile: scope === "recording" ? "direct" : $("#scenario-profile").value,
     generation_mode: quick ? "exhaustive" : $("#generation-mode").value,
     max_scenarios_per_pattern: quick ? 1 : $("#pattern-limit").valueAsNumber,
   };
@@ -179,12 +179,18 @@ function renderScenarioOptions(busy) {
     $("#pattern-limit").value = settings.max_scenarios_per_pattern ?? 1;
   }
   $("#scenario-options")
-    .querySelectorAll("select, input")
+    .querySelectorAll("select, input, button")
     .forEach((el) => {
       el.disabled = !!busy || !snapshot;
     });
   const options = readScenarioOptions();
   const quick = options.scenario_scope !== "full";
+  const recording = options.scenario_scope === "recording";
+  const patternCount = recording ? 4 : 3;
+  if (recording) {
+    $("#scenario-profile").value = "direct";
+    $("#scenario-profile").disabled = true;
+  }
   if (quick) {
     $("#generation-mode").value = "exhaustive";
     $("#pattern-limit").value = 1;
@@ -192,7 +198,7 @@ function renderScenarioOptions(busy) {
     $("#pattern-limit").disabled = true;
   }
   $("#scope-help").textContent = quick
-    ? `Checks only 3 attack patterns before generation. One scenario per pattern; normal validation still applies.`
+    ? `Checks only ${patternCount} attack patterns before generation. One scenario per pattern; normal validation still applies.`
     : "Searches all eligible attack patterns before selecting final scenarios. More model calls.";
   const full = options.scenario_profile === "full";
   const coverage = options.generation_mode === "coverage";
@@ -200,7 +206,7 @@ function renderScenarioOptions(busy) {
     ? "User messages, retrieved knowledge (RAG), and authenticated customer context."
     : "User messages through the Klarna app and web. The quick demo profile.";
   $("#mode-help").textContent = quick
-    ? "Quick demo explores only the preset's 3 patterns. This mode is fixed for the preset."
+    ? `Explores only the preset's ${patternCount} patterns. This mode is fixed for the preset.`
     : coverage
       ? "Coverage mode: one primary scenario per feasible entry point; other candidates are fallbacks."
       : "Exhaustive mode: explore eligible attack patterns, within the per-pattern limit. More model calls and a longer run.";
@@ -209,7 +215,9 @@ function renderScenarioOptions(busy) {
     : coverage
       ? "Coverage prioritizes entry points and may exceed this limit when needed. Raising it does not add variants for one entry point."
       : "Limit for each attack pattern, not the total scenario count. Choose 1–10.";
-  $("#generation-expectation").textContent = quick
+  $("#generation-expectation").textContent = recording
+    ? `Recording scope: 4 fixed patterns, direct input, one attempt per pattern. ${snapshot?.settings?.scenario_provider === "google" && snapshot?.settings?.model === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash-Lite selected; requests are paced for the demo." : "Select Recording preset in Demo size to restore the tested Gemini 3.1 Flash-Lite model."}`
+    : quick
     ? `Quick demo: check 3 attack patterns and generate up to 3 validated scenarios. Limited scope: misinformation, fabricated endpoints and reference data.`
     : coverage
       ? full
@@ -225,6 +233,7 @@ function renderScenarioOptions(busy) {
     : "This saved run predates option tracking; its generation settings were not recorded.";
 }
 function scopeLabel(scope) {
+  if (scope === "recording") return "Recording preset · 4 patterns";
   return scope === "quick3"
     ? "Quick demo · up to 3 scenarios"
     : "Full candidate search";
@@ -325,7 +334,7 @@ function renderActivity() {
 }
 
 function renderPolicy(data) {
-  return `<div class="report-toolbar"><div><span class="badge saved">Saved extraction</span><span>${data.count} matched entries · no live policy calls</span></div><div>${download(data.extraction, "Extraction JSON")}${download(data.report, "Open full report ↗")}</div></div><iframe class="policy-report" title="Interactive FS-ISAC policy report from PR 79" src="${escapeHTML(fileURL(data.report))}" sandbox="allow-scripts allow-downloads"></iframe>`;
+  return `<div class="report-toolbar"><div><span class="badge saved">Saved extraction</span><span>${data.count} matched entries · no live policy calls</span></div><div>${download(data.extraction, "Extraction JSON")}${download(data.report, "Open full report ↗")}</div></div><iframe class="policy-report" title="Interactive FS-ISAC policy report from PR 79" src="${escapeHTML(fileURL(data.report))}" sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox"></iframe>`;
 }
 function distribution(rows, key) {
   const result = {};
@@ -527,6 +536,23 @@ async function poll() {
     notice("Cannot reach the local demo server. " + error.message);
   }
 }
+$("#scenario-scope").addEventListener("change", async () => {
+  if ($("#scenario-scope").value !== "recording") return;
+  pending = true;
+  notice("");
+  controls();
+  try {
+    snapshot.settings = await api("/api/settings", snapshot.demo_preset);
+    scenarioOptionsDirty = false;
+    await poll();
+
+  } catch (error) {
+    notice(error.message);
+  } finally {
+    pending = false;
+    controls();
+  }
+});
 async function start(stage) {
   if (stage === "scenarios" || stage === "all") {
     if (!$("#scenario-options").checkValidity()) {

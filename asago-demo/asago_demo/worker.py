@@ -149,6 +149,9 @@ def prepare_demo_scope(run: Path, scope: str) -> Path | None:
 
     selected = {"T5"}
     expected = {"AP-T5-01", "AP-T5-02", "AP-T5-04"}
+    if scope == "recording":
+        selected.add("T10")
+        expected.add("AP-T10-01")
     actual = {p["id"] for p in load_attack_patterns().values() if p["threat_id"] in selected}
     if actual != expected:
         raise ValueError("The installed attack catalog changed. Update the quick demo preset.")
@@ -169,6 +172,8 @@ def prepare_demo_scope(run: Path, scope: str) -> Path | None:
 def scenarios(run: Path, config: dict) -> dict:
     from asago_scenario_generator.pipeline.runner import run_pipeline
 
+    from asago_demo.generation import generation_compatibility
+
     extraction = run / "policy/risk-extraction.json"
     if not extraction.is_file():
         raise ValueError("Load the saved policy extraction first")
@@ -180,22 +185,25 @@ def scenarios(run: Path, config: dict) -> dict:
         f"Scenario configuration: {json.dumps(options)}; one technique per scenario.",
         flush=True,
     )
-    result = run_pipeline(
-        use_case=(INPUTS / "use-cases/use-case-klarna-fs-isac-v36.txt").read_text(),
-        risk_extraction_path=extraction,
-        sssom_path=INPUTS / "mappings/risk_to_category.sssom.tsv",
-        output_dir=run / "scenario-generation",
-        profile_path=INPUTS / "profiles" / SCENARIO_PROFILES[options["scenario_profile"]],
-        qualification_facts_path=INPUTS / "profiles/klarna-qualification-facts.yaml",
-        threats_path=threats_path,
-        base_url=connection["base_url"],
-        api_key=connection["api_key"],
-        model=connection["model"],
-        max_techniques=1,
-        max_scenarios_per_pattern=options["max_scenarios_per_pattern"],
-        generation_mode=options["generation_mode"],
-        eval=True,
-    )
+    with generation_compatibility(
+        provider=connection["provider"], demo_preset=options["scenario_scope"] == "recording"
+    ):
+        result = run_pipeline(
+            use_case=(INPUTS / "use-cases/use-case-klarna-fs-isac-v36.txt").read_text(),
+            risk_extraction_path=extraction,
+            sssom_path=INPUTS / "mappings/risk_to_category.sssom.tsv",
+            output_dir=run / "scenario-generation",
+            profile_path=INPUTS / "profiles" / SCENARIO_PROFILES[options["scenario_profile"]],
+            qualification_facts_path=INPUTS / "profiles/klarna-qualification-facts.yaml",
+            threats_path=threats_path,
+            base_url=connection["base_url"],
+            api_key=connection["api_key"],
+            model=connection["model"],
+            max_techniques=1,
+            max_scenarios_per_pattern=options["max_scenarios_per_pattern"],
+            generation_mode=options["generation_mode"],
+            eval=True,
+        )
     data = summarize_scenarios(run, Path(result.run_dir))
     data["generation_options"] = options
     if threats_path:

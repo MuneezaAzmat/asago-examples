@@ -61,6 +61,9 @@ separate from the dashboard's next-run settings.
 all workers and Garak clients must use it. Model discovery previews draft
 connections without saving them. Never forward the LiteLLM key to Ollama, and
 record only public connection details in stage state.
+Keep the policy report header focused on the linked document name. Only the
+policy report with its adjacent source PDF may open a new tab outside its sandbox;
+all reports remain isolated from the controller API.
 Google Gemini uses its fixed official compatibility endpoint and a separate
 `google_api_key` (GEMINI_API_KEY/GOOGLE_API_KEY). Include every secret field in
 public-state filtering, empty-key preservation and redaction. Never send the
@@ -69,10 +72,14 @@ Each start creates fresh `activity` metadata and a separate execution log. Retai
 `logs` as the latest 160 lines for notebook compatibility; archive earlier attempts
 in `activity_history`. A full demo shares one activity record across all stages.
 Keep completion, cancellation, failure and restart states consistent with activity.
-Quick demo scope uses a reduced threat input through the pipeline's public
+Recording and quick demo scopes use a reduced threat input through the pipeline's public
 `threats_path` argument before seed expansion; it must never bypass qualification
-or validation. The quick preset uses T5 with exhaustive mode and
-one scenario per pattern. Check the installed pattern IDs so catalog changes fail
+or validation. The quick preset uses T5; recording uses T5 + T10 with direct input, exhaustive
+mode, and one scenario per pattern. `DEMO_PRESET` is the single source for the
+dropdown preset. Keep credentials and target settings intact. The worker-scoped
+`generation_compatibility` bridge guides actor/tree drafts, sizes Google behavior
+schemas, and paces the tested Flash-Lite model. It must not rewrite actors or
+change admission decisions; remove it after equivalent upstream fixes are pinned. Check the installed pattern IDs so catalog changes fail
 explicitly instead of silently increasing the demo workload.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,

@@ -460,3 +460,27 @@ def test_redaction_preserves_json_with_quoted_bearer_text(tmp_path, suffix):
     path.write_text(json.dumps({"text": 'Use "Authorization: Bearer example-token".'}))
     clean = redacted_file(path, {})
     assert json.loads(clean)["text"] == 'Use "Authorization: Bearer [redacted]".'
+
+
+def test_recording_preset_is_repeatable_and_preserves_credentials(tmp_path):
+    from asago_demo.runtime import DEMO_PRESET, scenario_options
+
+    settings = Settings(tmp_path, defaults={"google_api_key": "saved-google-key"})
+    settings.update(DEMO_PRESET)
+    restored = Settings(tmp_path, defaults={})
+    assert restored.private()["google_api_key"] == "saved-google-key"
+    assert all(restored.public()[key] == value for key, value in DEMO_PRESET.items())
+    options = scenario_options(
+        {
+            **DEMO_PRESET,
+            "scenario_profile": "full",
+            "generation_mode": "coverage",
+            "max_scenarios_per_pattern": 9,
+        }
+    )
+    assert options == {
+        "scenario_scope": "recording",
+        "scenario_profile": "direct",
+        "generation_mode": "exhaustive",
+        "max_scenarios_per_pattern": 1,
+    }

@@ -5,6 +5,11 @@ and artifact generation → a real model evaluation with Garak. The dashboard is
 suited to a 3–5 minute screen recording and shares the same run controller as the
 notebooks.
 
+The policy report's document name opens a local preview of all source PDF pages
+in a new tab, with a download link for the original PDF. This works in embedded
+browsers without native PDF support. The PDF and preview stay with each run;
+viewing them needs no model call or external document service.
+
 ## Setup
 
 Requires `uv`, Git, and download access. Supported on macOS and Linux. `uv` manages
@@ -97,6 +102,33 @@ original logs. The run selector opens saved results.
 Zero admitted scenarios, failed validation, and failed evaluations stay visible.
 The UI calls drafts that failed generation or admission checks **Rejected scenarios**.
 The underlying pipeline files retain their upstream `quarantine` field/path names.
+
+### Tested recording preset
+
+In the Scenario Generator tab, selecting **Recording preset** in the **Demo size**
+dropdown saves these choices together:
+Google `gemini-3.1-flash-lite`, direct input, exhaustive mode, one scenario per
+pattern, a 120-second request timeout, and only T5 + T10 (four seed patterns).
+It preserves credentials and the target model. Your Google API key must already
+be configured. Settings persist across server restarts; selecting the preset again restores them
+after experimenting with other choices.
+
+Two live verifications on October 1, 2026 each produced **3 admitted, Garak-compatible
+scenarios** in **1:54 and 1:58**, with one incompatible projection rejected each time.
+This is an observed result, not a guaranteed count or time. The four-pattern
+scope avoids repeating a full catalog search; normal qualification, final
+admission, and evaluation remain enabled. Successful runs remain available in
+the run selector for reviewing or continuing to artifact generation.
+
+The demo has a small compatibility bridge for the pinned Scenario Generator:
+actor and filter prompts state the existing per-item length bounds; the recording preset
+asks for a compatible advanced actor and explicit canonical tree ordering.
+Google behavior requests use one group with only the required action/assertion
+slots instead of the rejected 8 × 64 schema. Responses still pass the upstream
+models and compilers. Recording calls to this Flash-Lite model are spaced at
+least 4.2 seconds apart to stay below the observed 15 requests/minute quota.
+No actors are relabeled, validators disabled, or rejected drafts promoted.
+The adapter is scoped to the worker and restored when the stage ends.
 
 ### Scenario generation options
 
