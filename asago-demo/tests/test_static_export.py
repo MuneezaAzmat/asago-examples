@@ -1,5 +1,7 @@
 import hashlib
 import json
+import re
+import shutil
 
 import pytest
 
@@ -82,3 +84,26 @@ def test_static_export_requires_completed_read_only_snapshot(tmp_path):
     (source / "state.json").write_text(json.dumps(state))
     with pytest.raises(ValueError, match="completed.*snapshot"):
         export_snapshot(source, tmp_path / "site", assets)
+
+
+def test_updated_viewer_gets_a_new_script_url_to_bypass_browser_cache(tmp_path, monkeypatch):
+    from asago_demo import static_export
+
+    source, assets = snapshot_fixture(tmp_path)
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    for name in ("index.html", "app.js", "view-state.js", "style.css"):
+        shutil.copyfile(static_export.ROOT / name, ui / name)
+    monkeypatch.setattr(static_export, "ROOT", ui)
+    export_snapshot(source, tmp_path / "before", assets)
+    with (ui / "app.js").open("a") as script:
+        script.write("\n// Updated viewer\n")
+    export_snapshot(source, tmp_path / "after", assets)
+    before = (tmp_path / "before/index.html").read_text()
+    after = (tmp_path / "after/index.html").read_text()
+    before_url = re.search(r'src="(\./app\.js[^\"]*)"', before).group(1)
+    after_url = re.search(r'src="(\./app\.js[^\"]*)"', after).group(1)
+    assert before_url != after_url
+    assert (tmp_path / "after" / after_url.split("?")[0]).read_bytes() == (
+        ui / "app.js"
+    ).read_bytes()

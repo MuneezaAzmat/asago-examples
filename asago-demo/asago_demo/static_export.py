@@ -100,6 +100,10 @@ def export_snapshot(source: Path, output: Path, assets: dict[str, bytes]) -> dic
         '<script src="./view-state.js"',
         '<script src="./static-demo.js" defer></script>\n    <script src="./view-state.js"',
     )
+    # GitHub Pages caches scripts. A content version makes a newly exported page
+    # request the matching viewer instead of reusing an earlier deployment.
+    version = hashlib.sha256(payloads["app.js"]).hexdigest()[:12]
+    html = html.replace('src="./app.js"', f'src="./app.js?v={version}"')
     html = html.replace(
         '<a href="./">Return to live demo ↗</a>',
         f'<a href="{GUIDE}" target="_blank" rel="noreferrer">Run your own demo ↗</a>',
