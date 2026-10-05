@@ -234,22 +234,12 @@ Reports are isolated from the controller API; only localhost is served.
 
 ### Present a completed run without running models
 
-Select a completed run in the dashboard, then click **Save demo snapshot**.
-This copies all four stages, source files, reports, responses and logs to a new
-ignored `asago-demo/runs/<timestamp>-saved-<id>/` folder. The browser opens a
-dedicated `/?saved=<id>` link in the same dashboard. Bookmark that link for the
-recording; no model connection or inference is needed to view it.
-
-All four tabs, scenario filters, expandable evidence and downloads stay interactive.
-The page displays **Saved demo** and the source run ID, uses recorded model names,
-and hides generation and model controls. The scenario marked in the list is the
-one used for the saved artifact. New live runs cannot overwrite this copy or
-switch the saved page to another run. The controller also rejects attempts to
-execute stages against a snapshot, including notebook/API calls.
-
-Use **Return to live demo** to generate new results. Newly saved snapshots remain
-local and ignored. Keep the local server running to view those local links.
-Incomplete or failed runs cannot be saved as a completed demo snapshot.
+Open the [published recording](https://MuneezaAzmat.github.io/asago-examples/demo/).
+The four tabs, scenario filters, expandable evidence, PDF preview and downloads
+stay interactive. The selected scenario is fixed to the saved artifact's source.
+The page displays recorded model names and has no generation or connection controls.
+There is no snapshot-creation button or API in the local dashboard. Existing
+read-only local snapshots can still be viewed, with overwrite protection retained.
 
 ### Published recording
 

@@ -124,11 +124,8 @@ function controls() {
   const run = snapshot?.run,
     frozen = isSavedDemo(),
     busy = (!frozen && snapshot?.busy) || pending;
-  for (const id of ["run-all", "run-stage", "settings-open", "save-snapshot"])
+  for (const id of ["run-all", "run-stage", "settings-open"])
     $("#" + id).hidden = frozen;
-  $("#save-snapshot").disabled = !!busy || !run ||
-    !Object.keys(names).every(stage => run.stages?.[stage]?.status === "completed" && run.results?.[stage]?.status === "completed");
-  $("#save-snapshot").title = "Keep a fixed copy of a completed four-stage demo";
   $("#saved-demo").hidden = !frozen;
   $("#saved-demo-detail").textContent = run?.snapshot
     ? `Snapshot saved ${new Date(run.snapshot.captured_at * 1000).toLocaleString()} · No live model calls · Source run ${run.snapshot.source_run_id}`
@@ -618,20 +615,6 @@ document
     el.addEventListener("click", () => selectTab(el.dataset.tab)),
   );
 $("#run-all").addEventListener("click", () => start("all"));
-$("#save-snapshot").addEventListener("click", async () => {
-  pending = true;
-  notice("");
-  controls();
-  try {
-    const saved = await api("/api/snapshots", {run: selectedRun});
-    window.location.assign(saved.url);
-  } catch (error) {
-    notice(error.message);
-  } finally {
-    pending = false;
-    controls();
-  }
-});
 $("#run-stage").addEventListener("click", () => start(activeTab));
 $("#cancel").addEventListener("click", async () => {
   try {

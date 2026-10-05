@@ -5,11 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import uuid
@@ -414,39 +412,6 @@ class Coordinator:
                 }
             )
         return history
-
-    def save_snapshot(self, run_id: str) -> str:
-        """Copy completed evidence so future executions cannot overwrite it."""
-        with self.lock:
-            if not run_id:
-                raise ValueError("Select a completed run to save")
-            state = self.current(run_id)
-            if state.get("read_only"):
-                return run_id
-            if self.busy and run_id == self.active_id:
-                raise ValueError("Wait for this run to finish before saving it")
-            if state.get("status") != "completed" or any(
-                state["stages"][stage].get("status") != "completed"
-                or state["results"].get(stage, {}).get("status") != "completed"
-                for stage in STAGES
-            ):
-                raise ValueError("All four stages need completed results before saving a demo")
-            source = safe_child(self.runs, run_id)
-            if any(path.is_symlink() for path in source.rglob("*")):
-                raise ValueError("A saved demo cannot contain linked files")
-            snapshot_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-saved-") + uuid.uuid4().hex[:6]
-            with tempfile.TemporaryDirectory(dir=self.runs, prefix=".snapshot-") as temporary:
-                destination = Path(temporary) / snapshot_id
-                shutil.copytree(source, destination)
-                saved = json.loads((destination / "state.json").read_text())
-                saved.update(
-                    id=snapshot_id,
-                    read_only=True,
-                    snapshot={"source_run_id": run_id, "captured_at": time.time()},
-                )
-                atomic_json(destination / "state.json", saved)
-                destination.rename(self.runs / snapshot_id)
-            return snapshot_id
 
     def start(self, stage: str, run_id: str | None = None, scenario: str = "") -> str:
         if stage not in (*STAGES, "all"):

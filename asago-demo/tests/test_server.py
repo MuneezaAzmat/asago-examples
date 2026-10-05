@@ -27,30 +27,19 @@ def server(tmp_path):
 
 
 def test_saved_demo_api_preserves_evidence_and_rejects_execution(server):
-    from test_snapshots import completed_run
+    from test_snapshots import saved_run
 
     base, coordinator = server
-    original = completed_run(coordinator.root)
-    request = urllib.request.Request(
-        base + "/api/snapshots",
-        data=json.dumps({"run": "original"}).encode(),
-        headers={"X-Asago-Demo": "1", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request) as response:
-        saved = json.load(response)
-    assert saved["url"] == "/?saved=" + saved["run_id"]
-    (original / "policy/report.html").write_text("Later results")
-    with urllib.request.urlopen(base + "/api/state?run=" + saved["run_id"]) as response:
+    saved_run(coordinator.root)
+    with urllib.request.urlopen(base + "/api/state?run=saved") as response:
         state = json.load(response)
     assert state["run"]["read_only"] is True
     assert state["run"]["snapshot"]["source_run_id"] == "original"
-    with urllib.request.urlopen(
-        base + "/files/" + saved["run_id"] + "/policy/report.html"
-    ) as response:
+    with urllib.request.urlopen(base + "/files/saved/policy/report.html") as response:
         assert response.read() == b"Original report"
     request = urllib.request.Request(
         base + "/api/start",
-        data=json.dumps({"run": saved["run_id"], "stage": "all"}).encode(),
+        data=json.dumps({"run": "saved", "stage": "all"}).encode(),
         headers={"X-Asago-Demo": "1", "Content-Type": "application/json"},
     )
     with pytest.raises(urllib.error.HTTPError) as error:
@@ -68,6 +57,19 @@ def test_status_does_not_disclose_secrets(server):
     assert "google-saved-secret" not in data
     assert json.loads(data)["settings"]["google_api_key_configured"]
     assert json.loads(data)["settings"]["api_key_configured"]
+
+
+def test_snapshot_creation_endpoint_is_unavailable(server):
+    base, coordinator = server
+    request = urllib.request.Request(
+        base + "/api/snapshots",
+        data=b"{}",
+        headers={"X-Asago-Demo": "1", "Content-Type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(request)
+    assert error.value.code == 404
+    assert list(coordinator.runs.iterdir()) == []
 
 
 def test_browser_requests_cannot_start_jobs_cross_origin(server):

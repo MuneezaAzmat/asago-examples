@@ -91,7 +91,7 @@ actors or changing admission. `artifact_context.py` translates only the declared
 provenance-backed retrieval carrier into the pinned generator's legacy surface tag;
 never change admitted scenario files to force a tool-return classification.
 Remove compatibility bridges when equivalent upstream fixes are pinned.
-Completed demos can be copied via `POST /api/snapshots` to read-only run folders.
+The published demo uses fixed snapshot files; there is no snapshot-creation API.
 The `/?saved=<id>` view must stay pinned, use recorded model metadata, hide live
 controls, and preserve scenario-to-artifact provenance. Enforce the execution
 guard in the coordinator as well as the UI. Local snapshots stay ignored. The
