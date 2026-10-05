@@ -240,7 +240,7 @@ one used for the saved artifact. New live runs cannot overwrite this copy or
 switch the saved page to another run. The controller also rejects attempts to
 execute stages against a snapshot, including notebook/API calls.
 
-Use **Return to live workspace** to generate new results. Snapshots remain local
+Use **Return to live demo** to generate new results. Snapshots remain local
 and are not committed. Keep the local server running to view them; this is a
 saved-data mode in the existing UI, not a standalone HTML export. Incomplete or
 failed runs cannot be saved as a completed demo snapshot.
