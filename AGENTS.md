@@ -51,7 +51,9 @@ asago-examples/
 the localhost controller and four stage workers; static assets and notebooks live
 beside it. Reuse existing component input directories and installed libraries.
 Do not commit environments, dependency caches, credentials, notebook outputs, or
-run results. `./asago-demo/setup.sh` installs the locked workspace, fetches only
+unreviewed run results. The one reviewed successful snapshot in `docs/demo/` is
+an explicitly approved publication; keep all other generated runs ignored.
+`./asago-demo/setup.sh` installs the locked workspace, fetches only
 the pinned policy report files, and prepares the separate Python 3.13 Garak
 environment. Keep PR dependency revisions explicit until the features are released.
 Scenario options are validated by `asago_demo.runtime`, applied by the worker,
@@ -92,8 +94,11 @@ Remove compatibility bridges when equivalent upstream fixes are pinned.
 Completed demos can be copied via `POST /api/snapshots` to read-only run folders.
 The `/?saved=<id>` view must stay pinned, use recorded model metadata, hide live
 controls, and preserve scenario-to-artifact provenance. Enforce the execution
-guard in the coordinator as well as the UI. Snapshots and their evidence stay
-ignored; never commit generated runs. Reuse the existing result renderers.
+guard in the coordinator as well as the UI. Local snapshots stay ignored. The
+static exporter publishes only manifest-listed evidence from one reviewed
+completed snapshot, excludes caches and records source/published hashes. Reuse
+the existing result renderers; published pages must never call the controller
+API or model endpoints. Keep all evidence links relative for GitHub Pages paths.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

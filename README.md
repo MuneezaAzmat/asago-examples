@@ -32,6 +32,17 @@ jupyter notebook asago-scenario-generator/stpa-demo.ipynb            # STPA pipe
 
 ## Recordable end-to-end demo
 
+[**Open the precomputed demo in your browser →**](https://MuneezaAzmat.github.io/asago-examples/demo/)
+
+No downloads, setup, API keys, or live model calls are needed. This is the same
+saved successful-attack demo: explore the policy report, three indirect-injection
+scenarios, the selected artifact, and the recorded Qwen/Garak result. Qwen proposed
+a $150 refund; business tools were not executed. Only this snapshot and its
+supporting evidence are published. The preview is hosted from this PR's branch
+on the contributor's GitHub Pages site.
+
+To run your own demo locally:
+
 Run `./asago-demo/setup.sh`, configure `asago-demo/.env`, and start
 `./asago-demo/launch.sh`. Open **http://127.0.0.1:8765** for the interactive
 four-stage dashboard. It reuses the saved FS-ISAC extraction and Klarna inputs,

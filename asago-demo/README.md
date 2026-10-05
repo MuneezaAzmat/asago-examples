@@ -5,6 +5,11 @@ and artifact generation → a real model evaluation with Garak. The dashboard is
 suited to a 3–5 minute screen recording and shares the same run controller as the
 notebooks.
 
+[**Open the precomputed successful-attack demo →**](https://MuneezaAzmat.github.io/asago-examples/demo/)
+All four tabs and evidence links work in the browser without downloads, a local
+server, credentials or inference. It shows the recorded Qwen `process_refund`
+proposal for $150 and Garak's judgment; business tools were not executed.
+
 The policy report's document name opens a local preview of all source PDF pages
 in a new tab, with a download link for the original PDF. This works in embedded
 browsers without native PDF support. The PDF and preview stay with each run;
@@ -191,10 +196,12 @@ remain in their existing folders.
 | Tests, setup scripts, configuration example | `asago-demo/.cache/` report assets |
 | Workspace lock and Garak dependency pins | `asago-demo/runs/` |
 | This guide | `.env`, `settings.json`, notebook checkpoints |
+| One reviewed successful snapshot and static viewer in `docs/demo/` | Other runs and investigation results |
 
 Inputs are reused directly from `asago-policy-mapper/policy_examples/` and
-`asago-scenario-generator/inputs/`. No repository clone, duplicated input dataset,
-model output, or credential is committed. The demo imports the artifact generator
+`asago-scenario-generator/inputs/`. The single published snapshot is an explicit
+exception to ignoring generated outputs; no repository clones, environments,
+credentials, caches, or unrelated results are committed. The demo imports the artifact generator
 installed by `uv`, without relying on a sibling development checkout.
 
 | Component | Source |
@@ -240,10 +247,41 @@ one used for the saved artifact. New live runs cannot overwrite this copy or
 switch the saved page to another run. The controller also rejects attempts to
 execute stages against a snapshot, including notebook/API calls.
 
-Use **Return to live demo** to generate new results. Snapshots remain local
-and are not committed. Keep the local server running to view them; this is a
-saved-data mode in the existing UI, not a standalone HTML export. Incomplete or
-failed runs cannot be saved as a completed demo snapshot.
+Use **Return to live demo** to generate new results. Newly saved snapshots remain
+local and ignored. Keep the local server running to view those local links.
+Incomplete or failed runs cannot be saved as a completed demo snapshot.
+
+### Published recording
+
+`docs/demo/` contains only snapshot `20261005-160555-saved-attack-success-cd0505`,
+the successful evaluation `b51d45155c`, its selected artifact, the three scenarios
+from that generation, and supporting policy/report/log evidence. It uses the same
+UI renderers with fixed JSON data and relative file links. Live controls and API
+polling are disabled; **Run your own demo** links to setup instructions.
+
+The snapshot was assembled from the archived stage attempts identified in
+`evidence/snapshot-provenance.json`; it is not a newly executed run.
+`publication-manifest.json` records original and published hashes. Personal home
+directory prefixes are replaced with `[local-home]`; scenario content, target
+responses and judge results are preserved. Dependency caches are excluded.
+
+The README preview is served by GitHub Pages on the contributor's fork, from
+`codex/end-to-end-demo` → `/docs`. Only static files are served. A maintainer can
+publish the same `/docs` directory from the upstream repository after merge and
+update the README links. No deployment runs on pull-request events.
+
+To reproduce an export after local setup, use a reviewed completed snapshot with
+an explicit `snapshot-provenance.json` evidence manifest and a new output folder:
+
+```bash
+PYTHONPATH=asago-demo .venv/bin/python -m asago_demo.static_export \
+  asago-demo/runs/<saved-run-id> /tmp/asago-demo-preview
+```
+
+Review the exported files before publishing; this is an explicit publication
+step, not automatic uploading of local runs. The exporter verifies source hashes
+and never changes the original snapshot. The bundled viewer needs only static
+HTTP hosting; it does not require the Python controller or model endpoints.
 
 ### Record live generation
 
