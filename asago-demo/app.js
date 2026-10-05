@@ -128,7 +128,7 @@ function controls() {
     $("#" + id).hidden = frozen;
   $("#saved-demo").hidden = !frozen;
   $("#saved-demo-detail").textContent = run?.snapshot
-    ? `Snapshot saved ${new Date(run.snapshot.captured_at * 1000).toLocaleString()} · No live model calls · Source run ${run.snapshot.source_run_id}`
+    ? `Snapshot saved ${new Date(run.snapshot.captured_at * 1000).toLocaleString()} · Source run ${run.snapshot.source_run_id}`
     : "Loading saved results…";
   $("#panel-description").textContent = (frozen ? savedDescriptions : descriptions)[activeTab];
   $("#run-all").disabled = !!busy;
