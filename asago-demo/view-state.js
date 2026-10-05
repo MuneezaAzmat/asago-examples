@@ -1,5 +1,7 @@
 (function (root) {
-  function chooseRunId(selected, state, previousActive) {
+  function chooseRunId(selected, state, previousActive, pinned = "") {
+    if (pinned) return pinned;
+    if (state.run?.read_only && selected === state.run.id) return selected;
     if (state.active_id && state.active_id !== previousActive)
       return state.active_id;
     return selected || state.active_id || state.history?.[0]?.id || "";

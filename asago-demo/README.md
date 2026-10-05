@@ -225,6 +225,28 @@ Reports are isolated from the controller API; only localhost is served.
 
 ## Recording a 3–5 minute walkthrough
 
+### Present a completed run without running models
+
+Select a completed run in the dashboard, then click **Save demo snapshot**.
+This copies all four stages, source files, reports, responses and logs to a new
+ignored `asago-demo/runs/<timestamp>-saved-<id>/` folder. The browser opens a
+dedicated `/?saved=<id>` link in the same dashboard. Bookmark that link for the
+recording; no model connection or inference is needed to view it.
+
+All four tabs, scenario filters, expandable evidence and downloads stay interactive.
+The page displays **Saved demo** and the source run ID, uses recorded model names,
+and hides generation and model controls. The scenario marked in the list is the
+one used for the saved artifact. New live runs cannot overwrite this copy or
+switch the saved page to another run. The controller also rejects attempts to
+execute stages against a snapshot, including notebook/API calls.
+
+Use **Return to live workspace** to generate new results. Snapshots remain local
+and are not committed. Keep the local server running to view them; this is a
+saved-data mode in the existing UI, not a standalone HTML export. Incomplete or
+failed runs cannot be saved as a completed demo snapshot.
+
+### Record live generation
+
 Use a wide browser window and **Recording view**. Show 20 seconds of context,
 45 seconds of policy evidence, 60 seconds of scenarios, 60 seconds of artifacts,
 and 60 seconds of evaluation. Finish with the target response, judge reasoning,

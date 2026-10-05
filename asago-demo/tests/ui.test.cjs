@@ -163,6 +163,12 @@ test("failure with useful diagnostics can still show its results", () => {
   );
 });
 
+test("saved links stay pinned even when another live run starts or the snapshot is missing", () => {
+  assert.equal(chooseRunId("saved-a", {active_id: "new-run", history: []}, null, "saved-a"), "saved-a");
+  assert.equal(chooseRunId("", {active_id: "new-run", history: []}, null, "missing-snapshot"), "missing-snapshot");
+  assert.equal(chooseRunId("saved-a", {run: {id: "saved-a", read_only: true}, active_id: "new-run"}, null), "saved-a");
+});
+
 test("new notebook runs become visible even when another run was selected", () => {
   assert.equal(
     chooseRunId("run-a", { active_id: "run-b", history: [] }, "run-a"),

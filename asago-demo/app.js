@@ -8,7 +8,8 @@ const escapeHTML = (value) =>
         c
       ],
   );
-let selectedRun = "",
+const pinnedRun = new URLSearchParams(window.location.search).get("saved") || "";
+let selectedRun = pinnedRun,
   activeTab = "policy",
   snapshot = null,
   renderKey = "",
@@ -43,8 +44,19 @@ const descriptions = {
   evaluation:
     "Live evaluation · Replay the artifact against the selected target and inspect Garak’s judgment.",
 };
+const savedDescriptions = {
+  ...descriptions,
+  scenarios: "Saved scenarios · Explore the admitted scenarios, policy evidence, and behavior specifications.",
+  artifact: "Saved artifact · Inspect the generated transcript, detector rubric, and validation evidence.",
+  evaluation: "Saved evaluation · Inspect the recorded target response and Garak’s judgment.",
+};
+function isSavedDemo() {
+  return !!pinnedRun || !!snapshot?.run?.read_only;
+}
 
 async function api(route, data) {
+  if (data !== undefined && isSavedDemo())
+    throw new Error("This saved demo is read-only. Return to the live workspace to start a run.");
   const response = await fetch(
     route,
     data === undefined
@@ -105,10 +117,21 @@ function selectTab(tab) {
 
 function controls() {
   const run = snapshot?.run,
-    busy = snapshot?.busy || pending;
+    frozen = isSavedDemo(),
+    busy = (!frozen && snapshot?.busy) || pending;
+  for (const id of ["run-all", "run-stage", "settings-open", "save-snapshot"])
+    $("#" + id).hidden = frozen;
+  $("#save-snapshot").disabled = !!busy || !run ||
+    !Object.keys(names).every(stage => run.stages?.[stage]?.status === "completed" && run.results?.[stage]?.status === "completed");
+  $("#save-snapshot").title = "Keep a fixed copy of a completed four-stage demo";
+  $("#saved-demo").hidden = !frozen;
+  $("#saved-demo-detail").textContent = run?.snapshot
+    ? `Snapshot saved ${new Date(run.snapshot.captured_at * 1000).toLocaleString()} · No live model calls · Source run ${run.snapshot.source_run_id}`
+    : "Loading saved results…";
+  $("#panel-description").textContent = (frozen ? savedDescriptions : descriptions)[activeTab];
   $("#run-all").disabled = !!busy;
-  $("#cancel").hidden = !snapshot?.busy;
-  $("#history").disabled = !!busy;
+  $("#cancel").hidden = frozen || !snapshot?.busy;
+  $("#history").disabled = frozen || !!busy;
   $("#settings-open").disabled = !!busy;
   renderScenarioOptions(busy);
   const roles =
@@ -120,12 +143,12 @@ function controls() {
   const recordedModels = run?.stages?.[activeTab]?.models;
   $("#stage-model-summary").hidden = !roles.length;
   $("#stage-model-summary").textContent =
-    (recordedModels ? "This run: " : "Next run: ") +
+    (frozen ? "Recorded run: " : recordedModels ? "This run: " : "Next run: ") +
     roles
       .map((role) => {
         const choice =
           recordedModels?.[role] ||
-          resolveModel(snapshot?.settings || {}, role);
+          (frozen ? {provider: "", model: "Not recorded"} : resolveModel(snapshot?.settings || {}, role));
         return `${role === "target" ? "Target" : role === "judge" ? "Judge" : "Model"}: ${serviceName(choice.provider)} · ${choice.model || "Choose model"}`;
       })
       .join(" / ");
@@ -179,7 +202,8 @@ async function loadSearchPlan() {
   } finally { searchPlanLoading = false; }
 }
 function renderScenarioOptions(busy) {
-  $("#scenario-options").hidden = activeTab !== "scenarios";
+  $("#scenario-options").hidden = isSavedDemo() || activeTab !== "scenarios";
+  if (isSavedDemo()) return;
   if (!snapshot?.settings) return;
   if (!scenarioOptionsDirty) {
     const scope = snapshot.settings.scenario_scope || "recording";
@@ -331,6 +355,7 @@ function chart(title, entries, interactive = false) {
 }
 function renderScenarios(data) {
   const rows = data.scenarios || [];
+  if (isSavedDemo()) selectedScenario = snapshot.run.results.artifact?.scenario_file || "";
   if (!rows.some((s) => s.file === selectedScenario))
     selectedScenario =
       rows.find((s) => !s.skip_reason)?.file || rows[0]?.file || "";
@@ -350,7 +375,7 @@ function renderScenarios(data) {
     )
     .join(
       "",
-    )}</select><small id="scenario-count"></small></div><div id="scenario-list"></div><div class="report-toolbar"><span>Select a scenario, then open Artifact Generator.</span><div>${download(data.report, "Full scenario report ↗")}${download(data.run_dir + "/finalization-inventory.json", "Admission inventory")}</div></div><details class="technical"><summary>Technical details & rejection evidence</summary>${code({ inventory: data.inventory, rejected_scenarios: data.quarantine })}</details></div>`;
+    )}</select><small id="scenario-count"></small></div><div id="scenario-list"></div><div class="report-toolbar"><span>${isSavedDemo() ? "The marked scenario is the source of the saved artifact." : "Select a scenario, then open Artifact Generator."}</span><div>${download(data.report, "Full scenario report ↗")}${download(data.run_dir + "/finalization-inventory.json", "Admission inventory")}</div></div><details class="technical"><summary>Technical details & rejection evidence</summary>${code({ inventory: data.inventory, rejected_scenarios: data.quarantine })}</details></div>`;
 }
 function fillScenarioList() {
   const data = snapshot?.run?.results?.scenarios;
@@ -370,7 +395,7 @@ function fillScenarioList() {
           (r) => r.risk_id === s.risk_id,
         );
         const quote = risk?.evidence?.[0]?.text;
-        return `<article class="scenario-card ${s.file === selectedScenario ? "selected" : ""}"><div class="scenario-top"><label><input type="radio" name="scenario" value="${escapeHTML(s.file)}" ${s.file === selectedScenario ? "checked" : ""} ${s.skip_reason ? "disabled" : ""}><div><span class="id">${escapeHTML(s.id)}</span><h3>${escapeHTML(s.title)}</h3></div></label><span class="badge">${escapeHTML(s.surface)}</span></div><details ${s.file === selectedScenario ? "open" : ""}><summary>Scenario, policy evidence & behavior</summary><div class="scenario-body"><p>${escapeHTML(s.summary)}</p><div class="trace"><small>POLICY TRACE · ${escapeHTML(s.risk_id || "No risk ID exported")}</small>${escapeHTML(quote || risk?.risk_name || "See the scenario source for its risk mapping.")}</div>${s.skip_reason ? `<p>${escapeHTML(s.skip_reason)}</p>` : ""}<h4>Behavior specification</h4>${code(s.gherkin || "No separate behavior specification exported.")}<details class="technical"><summary>Scenario source</summary>${code(s.data)}</details><p style="margin-top:14px">${download(s.file, "Download scenario YAML")}</p></div></details></article>`;
+        return `<article class="scenario-card ${s.file === selectedScenario ? "selected" : ""}"><div class="scenario-top"><label><input type="radio" name="scenario" value="${escapeHTML(s.file)}" ${s.file === selectedScenario ? "checked" : ""} ${s.skip_reason || isSavedDemo() ? "disabled" : ""}><div><span class="id">${escapeHTML(s.id)}</span><h3>${escapeHTML(s.title)}</h3></div></label><span class="badge">${escapeHTML(s.surface)}</span></div><details ${s.file === selectedScenario ? "open" : ""}><summary>Scenario, policy evidence & behavior</summary><div class="scenario-body"><p>${escapeHTML(s.summary)}</p><div class="trace"><small>POLICY TRACE · ${escapeHTML(s.risk_id || "No risk ID exported")}</small>${escapeHTML(quote || risk?.risk_name || "See the scenario source for its risk mapping.")}</div>${s.skip_reason ? `<p>${escapeHTML(s.skip_reason)}</p>` : ""}<h4>Behavior specification</h4>${code(s.gherkin || "No separate behavior specification exported.")}<details class="technical"><summary>Scenario source</summary>${code(s.data)}</details><p style="margin-top:14px">${download(s.file, "Download scenario YAML")}</p></div></details></article>`;
       })
       .join("") ||
     empty(
@@ -389,7 +414,7 @@ function renderArtifact(data) {
     validation = data.validation || {},
     turns = artifact.turns || [];
   const rubrics = artifact.detector_rubric?.rubrics || {};
-  return `<div class="results-inner"><div class="metrics">${metric(data.coverage || "—", "Garak platform coverage")}${metric(validation.ok === true ? "Passed" : "Failed", "Artifact validation", validation.ok === true)}${metric(turns.length, "Transcript turns")}</div><div class="trace"><small>SCENARIO → ARTIFACT</small>${escapeHTML(data.scenario_id)} · ${escapeHTML(data.coverage_reason || "")}<br><small>Validation checks the generated artifact. Open Garak Evaluation to test the target model.</small></div><div class="conversation">${turns.map((t, i) => `<article class="turn ${t.adversarial ? "attack" : ""}"><header><span>${String(i + 1).padStart(2, "0")} / ${escapeHTML(t.role)}${t.name ? " · " + escapeHTML(t.name) : ""}</span>${t.adversarial ? '<span class="badge">Adversarial turn</span>' : ""}</header><pre>${escapeHTML(t.content || "")}</pre>${t.tool_calls ? code(t.tool_calls) : ""}</article>`).join("") || empty("No validated artifact written", "Inspect the validation evidence below. The original scenario is still available.")}</div><div class="rubrics"><div><h3>Attack success criteria</h3><ul>${(rubrics.attack_success || []).map((r) => `<li>${escapeHTML(r)}</li>`).join("")}</ul></div><div><h3>Attack blocked criteria</h3><ul>${(rubrics.attack_blocked || []).map((r) => `<li>${escapeHTML(r)}</li>`).join("")}</ul></div><details class="technical"><summary>Validation evidence & detector prompt</summary>${code(validation)}${code(artifact.detector_rubric?.judge_prompt || "")}</details><div class="report-toolbar"><span class="badge ${validation.ok ? "pass" : "fail"}">${validation.ok ? "Validated artifact" : "Validation failed"}</span><div>${download(data.file, "Garak artifact JSON")}${download(data.validation_file, "Validation JSON")}</div></div></div>`;
+  return `<div class="results-inner"><div class="metrics">${metric(data.coverage || "—", "Garak platform coverage")}${metric(validation.ok === true ? "Passed" : "Failed", "Artifact validation", validation.ok === true)}${metric(turns.length, "Transcript turns")}</div><div class="trace"><small>SCENARIO → ARTIFACT</small>${escapeHTML(data.scenario_id)} · ${escapeHTML(data.coverage_reason || "")}<br><small>Validation checks the generated artifact. ${isSavedDemo() ? "Open Garak Evaluation to see the recorded target response." : "Open Garak Evaluation to test the target model."}</small></div><div class="conversation">${turns.map((t, i) => `<article class="turn ${t.adversarial ? "attack" : ""}"><header><span>${String(i + 1).padStart(2, "0")} / ${escapeHTML(t.role)}${t.name ? " · " + escapeHTML(t.name) : ""}</span>${t.adversarial ? '<span class="badge">Adversarial turn</span>' : ""}</header><pre>${escapeHTML(t.content || "")}</pre>${t.tool_calls ? code(t.tool_calls) : ""}</article>`).join("") || empty("No validated artifact written", "Inspect the validation evidence below. The original scenario is still available.")}</div><div class="rubrics"><div><h3>Attack success criteria</h3><ul>${(rubrics.attack_success || []).map((r) => `<li>${escapeHTML(r)}</li>`).join("")}</ul></div><div><h3>Attack blocked criteria</h3><ul>${(rubrics.attack_blocked || []).map((r) => `<li>${escapeHTML(r)}</li>`).join("")}</ul></div><details class="technical"><summary>Validation evidence & detector prompt</summary>${code(validation)}${code(artifact.detector_rubric?.judge_prompt || "")}</details><div class="report-toolbar"><span class="badge ${validation.ok ? "pass" : "fail"}">${validation.ok ? "Validated artifact" : "Validation failed"}</span><div>${download(data.file, "Garak artifact JSON")}${download(data.validation_file, "Validation JSON")}</div></div></div>`;
 }
 function renderEvaluation(data) {
   const labels = {
@@ -399,7 +424,7 @@ function renderEvaluation(data) {
   };
   const attempts = data.attempts || [];
   const confidence = attempts[0]?.confidence;
-  return `<div class="results-inner"><div class="evaluation-verdict ${data.outcome === "attack_succeeded" ? "hit" : ""}"><span class="badge">Live model test</span><h3>${escapeHTML(labels[data.outcome] || "Evaluation result")}</h3><p>${escapeHTML(data.target_model)} · ${escapeHTML(serviceName(data.target_provider || "ollama"))} · ${attempts.length} response${attempts.length === 1 ? "" : "s"} evaluated</p></div><div class="metrics">${metric(confidence == null ? "—" : confidence + "/100", "Judge confidence in attack success")}${metric(data.threshold || 70, "Success cutoff")}${metric(data.judge_model || "—", "Judge model")}</div><div class="trace"><small>ARTIFACT → TARGET → JUDGE</small>${escapeHTML(data.scenario_id)}<br><small>Real model response to the artifact’s replayed context. Proposed tool calls are captured; external tools are not executed. One scenario does not establish overall model safety.</small></div>${attempts.map((a, i) => `<article class="turn"><header><span>${i + 1} / ${escapeHTML(data.target_model)} response</span><span class="badge">${escapeHTML(labels[a.outcome])}</span></header><pre>${escapeHTML(a.response || "The model responded with tool calls.")}</pre>${a.tool_calls?.length ? "<h4>Proposed tool calls</h4>" + code(a.tool_calls) : ""}</article><div class="judge-reason"><h3>Why Garak reached this result</h3><p>${escapeHTML(a.reasoning)}</p></div>`).join("")}<div class="report-toolbar"><span>Garak PR #11 · InjectionJudge</span><div>${download(data.report_file, "Garak report JSONL")}${download(data.conversation_file, "Replayed conversation")}${download(data.artifact_file, "Source artifact")}</div></div><details class="technical"><summary>Execution details</summary>${code({ target: data.target_base_url, model: data.target_model, judge: data.judge_model, probe: "injection.IndirectInjection", detector: "injection_judge.InjectionJudge", revision: data.garak_revision, tool_execution: false })}</details></div>`;
+  return `<div class="results-inner"><div class="evaluation-verdict ${data.outcome === "attack_succeeded" ? "hit" : ""}"><span class="badge">${isSavedDemo() ? "Saved model test" : "Live model test"}</span><h3>${escapeHTML(labels[data.outcome] || "Evaluation result")}</h3><p>${escapeHTML(data.target_model)} · ${escapeHTML(serviceName(data.target_provider || "ollama"))} · ${attempts.length} response${attempts.length === 1 ? "" : "s"} evaluated</p></div><div class="metrics">${metric(confidence == null ? "—" : confidence + "/100", "Judge confidence in attack success")}${metric(data.threshold || 70, "Success cutoff")}${metric(data.judge_model || "—", "Judge model")}</div><div class="trace"><small>ARTIFACT → TARGET → JUDGE</small>${escapeHTML(data.scenario_id)}<br><small>Real model response to the artifact’s replayed context. Proposed tool calls are captured; external tools are not executed. One scenario does not establish overall model safety.</small></div>${attempts.map((a, i) => `<article class="turn"><header><span>${i + 1} / ${escapeHTML(data.target_model)} response</span><span class="badge">${escapeHTML(labels[a.outcome])}</span></header><pre>${escapeHTML(a.response || "The model responded with tool calls.")}</pre>${a.tool_calls?.length ? "<h4>Proposed tool calls</h4>" + code(a.tool_calls) : ""}</article><div class="judge-reason"><h3>Why Garak reached this result</h3><p>${escapeHTML(a.reasoning)}</p></div>`).join("")}<div class="report-toolbar"><span>Garak PR #11 · InjectionJudge</span><div>${download(data.report_file, "Garak report JSONL")}${download(data.conversation_file, "Replayed conversation")}${download(data.artifact_file, "Source artifact")}</div></div><details class="technical"><summary>Execution details</summary>${code({ target: data.target_base_url, model: data.target_model, judge: data.judge_model, probe: "injection.IndirectInjection", detector: "injection_judge.InjectionJudge", revision: data.garak_revision, tool_execution: false })}</details></div>`;
 }
 function render() {
   controls();
@@ -488,25 +513,29 @@ async function poll() {
       "/api/state" +
         (selectedRun ? "?run=" + encodeURIComponent(selectedRun) : ""),
     );
+    if (pinnedRun && (!data.run?.read_only || data.run.id !== pinnedRun))
+      throw new Error("This link does not identify a saved demo snapshot.");
     snapshot = data;
-    const nextRun = chooseRunId(selectedRun, data, observedActiveId);
+    const nextRun = chooseRunId(selectedRun, data, observedActiveId, pinnedRun);
     observedActiveId = data.active_id;
     if (nextRun && nextRun !== selectedRun) {
       selectedRun = nextRun;
       selectedScenario = "";
       return await poll();
     }
-    const scenarioModel = resolveModel(data.settings, "scenario");
+    const scenarioModel = isSavedDemo()
+      ? data.run.stages.scenarios.models?.scenario || {provider: "", model: data.run.model || "Not recorded"}
+      : resolveModel(data.settings, "scenario");
     $("#model-label").textContent =
       `${serviceName(scenarioModel.provider)} · ${scenarioModel.model || "Choose model"}`;
     const historyHTML =
       (data.history.length
         ? ""
         : '<option value="">No saved runs yet</option>') +
-      data.history
+      (isSavedDemo() ? [data.run] : data.history)
         .map(
           (r) =>
-            `<option value="${escapeHTML(r.id)}">${escapeHTML(r.id)} · ${escapeHTML(r.status)}</option>`,
+            `<option value="${escapeHTML(r.id)}">${escapeHTML(r.id)} · ${r.read_only ? "Saved demo" : escapeHTML(r.status)}</option>`,
         )
         .join("");
     if ($("#history").innerHTML !== historyHTML)
@@ -515,6 +544,7 @@ async function poll() {
     render();
   } catch (error) {
     notice("Cannot reach the local demo server. " + error.message);
+    controls();
   }
 }
 $("#scenario-scope").addEventListener("change", async () => {
@@ -583,6 +613,20 @@ document
     el.addEventListener("click", () => selectTab(el.dataset.tab)),
   );
 $("#run-all").addEventListener("click", () => start("all"));
+$("#save-snapshot").addEventListener("click", async () => {
+  pending = true;
+  notice("");
+  controls();
+  try {
+    const saved = await api("/api/snapshots", {run: selectedRun});
+    window.location.assign(saved.url);
+  } catch (error) {
+    notice(error.message);
+  } finally {
+    pending = false;
+    controls();
+  }
+});
 $("#run-stage").addEventListener("click", () => start(activeTab));
 $("#cancel").addEventListener("click", async () => {
   try {
@@ -593,6 +637,10 @@ $("#cancel").addEventListener("click", async () => {
   }
 });
 $("#history").addEventListener("change", async (e) => {
+  if (snapshot?.history.find(run => run.id === e.target.value)?.read_only) {
+    window.location.assign("/?saved=" + encodeURIComponent(e.target.value));
+    return;
+  }
   selectedRun = e.target.value;
   selectedScenario = "";
   renderKey = "";

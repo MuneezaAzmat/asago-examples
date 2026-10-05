@@ -142,6 +142,20 @@ h2 {
 .danger {
   color: #fb8c86;
 }
+.saved-demo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  border: 1px solid var(--asago-border);
+  border-left: 4px solid var(--asago-secondary);
+  background: var(--asago-card);
+}
+.saved-demo p { margin: 6px 0 0; color: var(--asago-muted); font-size: 14px; }
+.saved-demo a { color: var(--asago-link); }
 .context-strip {
   display: grid;
   grid-template-columns: 1.2fr 1.2fr 1fr 1.6fr;

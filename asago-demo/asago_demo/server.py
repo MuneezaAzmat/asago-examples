@@ -165,6 +165,9 @@ def make_handler(coordinator):
                 data = json.loads(self.rfile.read(size) or b"{}")
                 if not isinstance(data, dict):
                     raise ValueError("Expected a JSON object")
+                if self.path == "/api/snapshots":
+                    run_id = coordinator.save_snapshot(data.get("run", ""))
+                    return self.send({"run_id": run_id, "url": "/?saved=" + run_id})
                 if self.path == "/api/start":
                     run_id = coordinator.start(
                         data.get("stage", "all"), data.get("run"), data.get("scenario", "")

@@ -26,6 +26,40 @@ def server(tmp_path):
     httpd.server_close()
 
 
+def test_saved_demo_api_preserves_evidence_and_rejects_execution(server):
+    from test_snapshots import completed_run
+
+    base, coordinator = server
+    original = completed_run(coordinator.root)
+    request = urllib.request.Request(
+        base + "/api/snapshots",
+        data=json.dumps({"run": "original"}).encode(),
+        headers={"X-Asago-Demo": "1", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request) as response:
+        saved = json.load(response)
+    assert saved["url"] == "/?saved=" + saved["run_id"]
+    (original / "policy/report.html").write_text("Later results")
+    with urllib.request.urlopen(base + "/api/state?run=" + saved["run_id"]) as response:
+        state = json.load(response)
+    assert state["run"]["read_only"] is True
+    assert state["run"]["snapshot"]["source_run_id"] == "original"
+    with urllib.request.urlopen(
+        base + "/files/" + saved["run_id"] + "/policy/report.html"
+    ) as response:
+        assert response.read() == b"Original report"
+    request = urllib.request.Request(
+        base + "/api/start",
+        data=json.dumps({"run": saved["run_id"], "stage": "all"}).encode(),
+        headers={"X-Asago-Demo": "1", "Content-Type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(request)
+    assert error.value.code == 400
+    assert "read-only" in json.load(error.value)["error"]
+    assert not coordinator.busy
+
+
 def test_status_does_not_disclose_secrets(server):
     base, _ = server
     with urllib.request.urlopen(base + "/api/state") as response:

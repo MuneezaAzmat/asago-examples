@@ -89,6 +89,11 @@ actors or changing admission. `artifact_context.py` translates only the declared
 provenance-backed retrieval carrier into the pinned generator's legacy surface tag;
 never change admitted scenario files to force a tool-return classification.
 Remove compatibility bridges when equivalent upstream fixes are pinned.
+Completed demos can be copied via `POST /api/snapshots` to read-only run folders.
+The `/?saved=<id>` view must stay pinned, use recorded model metadata, hide live
+controls, and preserve scenario-to-artifact provenance. Enforce the execution
+guard in the coordinator as well as the UI. Snapshots and their evidence stay
+ignored; never commit generated runs. Reuse the existing result renderers.
 
 Checks: `.venv/bin/python -m pytest asago-demo/tests -q`,
 `.venv/bin/ruff check asago-demo`, `.venv/bin/ruff format --check asago-demo`, and

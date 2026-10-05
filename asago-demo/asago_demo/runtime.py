@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -296,10 +298,11 @@ class Coordinator:
         self.state = None
         # A server restart cannot make an interrupted run appear to be running.
         saved_states = sorted(self.runs.glob("*/state.json"), key=lambda p: p.stat().st_mtime)
-        if saved_states:
-            self.active_id = saved_states[-1].parent.name
         for path in saved_states:
             state = json.loads(path.read_text())
+            if state.get("read_only"):
+                continue
+            self.active_id = path.parent.name
             if state.get("status") == "running":
                 state["status"] = "interrupted"
                 if state.get("activity"):
@@ -404,13 +407,56 @@ class Coordinator:
         history = []
         for path in sorted(self.runs.glob("*/state.json"), reverse=True)[:40]:
             state = json.loads(path.read_text())
-            history.append({k: state.get(k) for k in ("id", "started", "status", "model")})
+            history.append(
+                {
+                    k: state.get(k)
+                    for k in ("id", "started", "status", "model", "read_only", "snapshot")
+                }
+            )
         return history
+
+    def save_snapshot(self, run_id: str) -> str:
+        """Copy completed evidence so future executions cannot overwrite it."""
+        with self.lock:
+            if not run_id:
+                raise ValueError("Select a completed run to save")
+            state = self.current(run_id)
+            if state.get("read_only"):
+                return run_id
+            if self.busy and run_id == self.active_id:
+                raise ValueError("Wait for this run to finish before saving it")
+            if state.get("status") != "completed" or any(
+                state["stages"][stage].get("status") != "completed"
+                or state["results"].get(stage, {}).get("status") != "completed"
+                for stage in STAGES
+            ):
+                raise ValueError("All four stages need completed results before saving a demo")
+            source = safe_child(self.runs, run_id)
+            if any(path.is_symlink() for path in source.rglob("*")):
+                raise ValueError("A saved demo cannot contain linked files")
+            snapshot_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-saved-") + uuid.uuid4().hex[:6]
+            with tempfile.TemporaryDirectory(dir=self.runs, prefix=".snapshot-") as temporary:
+                destination = Path(temporary) / snapshot_id
+                shutil.copytree(source, destination)
+                saved = json.loads((destination / "state.json").read_text())
+                saved.update(
+                    id=snapshot_id,
+                    read_only=True,
+                    snapshot={"source_run_id": run_id, "captured_at": time.time()},
+                )
+                atomic_json(destination / "state.json", saved)
+                destination.rename(self.runs / snapshot_id)
+            return snapshot_id
 
     def start(self, stage: str, run_id: str | None = None, scenario: str = "") -> str:
         if stage not in (*STAGES, "all"):
             raise ValueError("Unknown stage")
         with self.lock:
+            selected_id = run_id or (self.active_id if stage not in {"policy", "all"} else None)
+            if selected_id and self.current(selected_id).get("read_only"):
+                raise ValueError(
+                    "This saved demo is read-only. Return to the live workspace to start a run."
+                )
             if self.busy:
                 raise ValueError("A run is already running")
             config = self.settings.private()
